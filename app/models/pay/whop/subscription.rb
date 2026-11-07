@@ -17,10 +17,10 @@ module Pay
           return record if saved_time && saved_time > source_time
           status = object.fetch("status")
           status = {"drafted" => "incomplete", "unresolved" => "incomplete", "canceling" => "active", "expired" => "canceled"}.fetch(status, status)
-          ends_at = if object["cancel_at_period_end"]
+          ends_at = if %w[canceled expired].include?(object["status"])
+            object["canceled_at"].presence || object["expires_at"].presence || object.fetch("updated_at")
+          elsif object["cancel_at_period_end"]
             object.fetch("current_period_end")
-          elsif %w[canceled expired].include?(object["status"])
-            object["canceled_at"] || object["expires_at"] || object.fetch("updated_at")
           end
           record.update!(
             name: record.name.presence || object.dig("metadata", "pay_subscription_name").presence || Pay.default_product_name,

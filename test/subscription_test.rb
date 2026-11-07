@@ -53,7 +53,7 @@ class SubscriptionTest < ActiveSupport::TestCase
     api(:get, "memberships/mem_test", membership)
     subscription = Pay::Whop::Subscription.sync("mem_test")
     api(:post, "memberships/mem_test/cancel", membership(status: "canceled"), body: {cancel_at_period_end: false})
-    api(:get, "memberships/mem_test", membership(status: "canceled", canceled_at: "2026-11-07T00:00:00Z", updated_at: "2026-11-08T00:00:00Z"))
+    api(:get, "memberships/mem_test", membership(status: "canceled", cancel_at_period_end: true, canceled_at: "2026-11-07T00:00:00Z", updated_at: "2026-11-08T00:00:00Z"))
     subscription.cancel_now!
     assert_not subscription.active?
     assert_not subscription.resumable?
