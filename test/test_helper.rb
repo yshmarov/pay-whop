@@ -11,6 +11,7 @@ ActiveRecord::Schema.define do
     t.string :email
     t.string :checkout_key
     t.text :checkout_url
+    t.json :checkout_urls, default: {}, null: false
     t.timestamps
   }
 end
@@ -23,6 +24,8 @@ CreatePayTables.new.migrate(:up)
 AddPayStiColumns.new.migrate(:up)
 AddObjectToPayModels.new.migrate(:up)
 CreatePayWhopDeliveries.new.migrate(:up)
+require_relative "../db/migrate/20261107120000_create_pay_whop_resources"
+CreatePayWhopResources.new.migrate(:up)
 
 class ActiveSupport::TestCase
   include ActiveJob::TestHelper

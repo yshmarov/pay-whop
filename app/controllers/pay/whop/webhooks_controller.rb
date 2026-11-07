@@ -6,13 +6,13 @@ module Pay
         event = ::WhopSDK::Helpers::VerifyWebhook.unwrap(request.raw_post,
           headers: %w[webhook-id webhook-timestamp webhook-signature].to_h { |name| [name, request.headers[name]] },
           key: Whop.webhook_secret).deep_stringify_keys
-        Whop.verify_account!(event)
+        account = Whop.verify_account!(event)
         return head :ok unless Delivery::EVENTS.include?(event["type"])
         raise InvalidPayload, "Webhook ID mismatch" unless event.fetch("id") == request.headers["webhook-id"]
         object = event.fetch("data")
         resource_id = event["type"].start_with?("refund.") ? object.fetch("payment_id") : object.fetch("id")
         raise InvalidPayload, "Missing resource ID" if resource_id.blank?
-        delivery = Delivery.create_or_find_by!(environment: Whop.environment, account_id: Whop.account_id, event_id: event.fetch("id")) do |record|
+        delivery = Delivery.create_or_find_by!(environment: Whop.environment, account_id: account, event_id: event.fetch("id")) do |record|
           record.event_type = event.fetch("type")
           record.resource_id = resource_id
         end

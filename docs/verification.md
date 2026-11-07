@@ -1,81 +1,56 @@
 # Verification
 
-Verification date: 7 November 2026.
+Verification date: 7 November 2026. Release: `0.1.0.alpha.2`.
 
-## Versions exercised
+## Versions and automated coverage
 
-- Ruby 4.0.9
-- Rails 8.1.4.1
-- Pay 12.4.0
-- Whop Ruby SDK 2.7.0
-- Whop API version `2026-10-28-1`
-- SQLite 2.10.2 gem
+Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
 
-GitHub Actions passed tests and Standard Ruby linting on Ruby 3.3, 3.4 and 4.0 on Linux: [public playground CI run](https://github.com/yshmarov/pay-whop/actions/runs/42361431644), 7 November 2026.
+The local suite passes **65 tests / 207 assertions** and Standard Ruby linting. GitHub Actions exercises Ruby 3.3, 3.4 and 4.0; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
 
-## Automated coverage
+Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries.
 
-Local result: 30 tests, 100 assertions, zero failures or errors. Standard Ruby linting and Rails eager loading pass. The alpha gem builds successfully.
+## Actual sandbox evidence
 
-The suite exercises the actual SDK HTTP boundary with WebMock, Rails routing, Active Job enqueueing and Pay's real models. It covers:
+The [hosted playground](https://pay-whop.onrender.com/) uses the adapter and receives actual signed Whop events. Its database persists across deployments and idle shutdowns. The app is sandbox-only; no live-money transactions were performed.
 
-- Signed customer mapping and seller/environment isolation.
-- Conflicting member-to-owner links and forged references.
-- Payment-first delivery followed by membership synchronization.
-- Duplicate delivery IDs, completed event replays and event-ID collisions.
-- HMAC verification and rejection of expired signatures.
-- Failed API calls leaving recoverable pending deliveries.
-- Queue refusal returning HTTP 503 instead of pretending enqueue succeeded.
-- Older provider snapshots failing to undo newer cancellation state.
-- Period-end cancellation, immediate cancellation and reversal of pending cancellation.
-- Pending/unpaid transactions not becoming Pay charges.
-- Full refunds and currency mismatch rejection.
-- Insufficient seller balance raising an error without marking a charge refunded.
-- Exact money conversion for two-, zero- and three-decimal currencies.
-- Isolated browser sessions, cross-customer read/action isolation, CSRF protection, idempotent checkout reuse and pending-payment presentation.
+| Flow | Observed result |
+| --- | --- |
+| Hosted recurring checkout | Paid USD 24.00 including tax; one Pay charge and active subscription created by verified webhooks |
+| Cancellation | Immediate and period-end cancellation, and reversal of scheduled cancellation, verified |
+| Full refund | Provider reported USD 24.00 refunded; local Pay charge agreed |
+| Saved payment methods | Retrieved a method through the linked member and selected the adapter's local default |
+| Direct one-time saved-method payment | Initially `open`, later `paid`; USD 6.00 including tax, with no recurring subscription |
+| Partial refund | Requested 100 minor units; provider and Pay reported exactly USD 1.00 refunded from the USD 6.00 payment |
+| Pause / resume billing | Provider reported `paused_at`; adapter showed billing paused while retaining paid-period access; resume cleared the pause |
+| Free days | Added one day and observed the changed provider period end |
+| Draft invoice | Created and persisted a USD 5.00 draft |
+| Invoice issue | Whop rejected issuance: account verification required. Draft remained unissued |
+| Subaccount creation | Created a sandbox seller and verified its parent account before registering it locally |
+| Hosted onboarding and payout links | Both generated valid sandbox Whop URLs after the required scopes were configured |
+| Marketplace checkout | Created a USD 5.00 subaccount checkout configured with a USD 1.00 platform fee |
+| Platform transfer | Whop rejected the request because the platform business is not verified; no transfer was recorded as successful |
+| Visitor isolation | A separate hosted visitor could not see or cancel/refund another visitor's records; cross-customer actions returned 404 |
+| Queue and deployment | PostgreSQL migrations, eager loading and persisted GoodJob execution verified; earlier deployment-time webhook failures recovered on Whop retry |
 
-The fixtures are synthetic. They do not contain captured customer records or API credentials.
+A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Authentication challenges, dispute submission and evidence upload, authorization/capture/void, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
 
-## Sandbox evidence
+## Integration findings
 
-- Created a sandbox Account API key through the authenticated dashboard; stored locally outside version control.
-- Authenticated against the checkout-configuration API.
-- Created a hidden test product and recurring USD variant.
-- Created a customer-specific hosted checkout using the adapter and signed Pay metadata.
-- Registered the nine billing webhook events through the dashboard, pinned to the same API version as requests.
-- Completed hosted checkout with Whop's documented test card: USD 24.00 (USD 10 initial fee, USD 10 first period and USD 4 tax). The API confirmed `paid`.
-- Received the actual signed payment event through the public HTTPS endpoint; its background job created one 2,400-cent Pay charge and one active subscription.
-- Verified scheduled cancellation retains access, resume clears the scheduled end, and immediate cancellation changes the subscription to canceled with no active access.
-- Received membership events and processed all retained receipts with none pending.
-- Attempted a full refund through the adapter. Whop returned `not_enough_balance`; the dashboard showed USD 17.83 entirely pending. The local charge correctly remained unrefunded. The charge remained unrefunded at that point. A later refund succeeded on the public deployment, as recorded below.
+1. The sandbox Admin API-key role does not include `company:balance:read`, which account inspection needs. The expanded integration uses explicit custom scopes.
+2. Hosted onboarding/payout links require additional financial scopes, including transfer/withdrawal exports and payout-destination operations. The API reports missing scopes explicitly.
+3. Saved-payment-method listing accepts a member filter or an account filter, not both. The adapter lists through the linked member and never imports arbitrary supplied method IDs.
+4. SDK 2.7 declares `partial_amount` as an integer even though the API accepts major-unit decimal amounts. Its JSON transport also ignores the documented `additional_body_parameters` option. Refunds therefore use a small authenticated HTTP fallback with exact decimal JSON numbers, a pinned API date, a stable idempotency key, TLS and bounded timeouts. Tests assert the outgoing fractional amount and no automatic write retry.
+5. Payment capture returns a status object, not a complete Payment. The adapter retrieves the payment again before creating a Pay charge.
+6. Under Rails, SDK objects must be converted via `to_h` before JSON serialization. Nullable SDK values can normalize to empty hashes; non-renewing memberships and unsettled transfer amounts are handled accordingly.
+7. Whop's membership pause is reflected in `most_recent_action`, while the billing status can remain `active`. Pay access remains available through the current paid period.
+8. Successful API responses may describe a pending operation. Neither a checkout return, an HTTP 200 nor a created transfer is treated as settlement.
+9. Refunds and transfers can fail due to available balance or account capabilities, even in the sandbox. The adapter does not bypass identity verification.
 
-The first tunnel inherited an unrelated local Cloudflare ingress configuration and returned 404. Restarting with an explicit empty config corrected routing. Whop replayed the payment successfully with HTTP 200, and subsequent membership events arrived normally. This also exercised recovery after a real delivery failure.
+## Remaining limits
 
-## Public deployment evidence
+This is an alpha integration, not a declaration of production readiness or full Pay/Stripe parity. Live-money processing, high-concurrency PostgreSQL races, full accessibility assessment, SCA recovery UX, FX/tax reconciliation, historical backfills, broad Pay-version upgrade compatibility and long-running renewal/retry behavior remain unverified.
 
-The [public playground](https://pay-whop.onrender.com/) runs on Render Free with persistent PostgreSQL on Neon Free and GoodJob jobs stored in that database. It is sandbox-only. Free hosting sleeps when idle and is subject to provider usage limits.
+Plan swaps/proration, recurring seat changes and metered billing are not implemented. The Whop `swaps` API is for currencies, not subscription plans. The adapter does not implement Whop's unrelated chat, ads, trading, cards or affiliate administration APIs; callers can use the official SDK for those.
 
-- Completed a new hosted sandbox checkout from the public app and returned to the same browser session.
-- Whop retried initial HTTP 500 deliveries after the signing-secret deployment finished; the payment and membership events then received HTTP 200 and completed in GoodJob.
-- Confirmed one active subscription and one USD 24.00 charge in the public UI and PostgreSQL, with all received receipts processed.
-- Scheduled cancellation through the public UI, verified the scheduled state, then resumed and verified active state with no scheduled end.
-- Requested a full refund through the public UI. Whop's payment API reported USD 24.00 refunded, matching the persisted Pay charge and public display. Refund success is therefore verified in sandbox; pending seller funds can still block other refunds.
-- Verified a separate hosted visitor cannot see the first visitor's billing records; cross-customer cancellation and refund requests return HTTP 404.
-- Verified PostgreSQL migrations, production eager loading and persistent job execution. This is not a high-concurrency PostgreSQL stress test.
-- Checked the playground layout at desktop and 390px mobile widths.
-
-The earlier temporary tunnel was used only for local integration testing; the public demo has a stable hosted URL.
-
-## Integration details discovered
-
-1. Whop's documented sandbox Admin role does not grant `company:balance:read`, so `accounts.me` is unsuitable as a minimal adapter connectivity check. Checkout reads work with the same key.
-2. The Admin key also lacks `developer:manage_webhook`. A seller can register webhooks through the dashboard without granting that permission to the running application.
-3. Hosted checkout rejects HTTP return URLs, including localhost. The example therefore takes `WHOP_RETURN_URL` separately.
-4. The SDK's default date is `2026-10-28`; the dashboard offers the precise version `2026-10-28-1`. Both requests and webhook configuration explicitly use the latter.
-5. Under Rails, serializing an SDK model directly with `to_json` is not the same as serializing its API fields. The adapter converts via `to_h` first.
-6. The current SDK types `partial_amount` as an integer while the API describes a currency-unit number. The first release supports full remaining-balance refunds only, rather than silently truncating fractional requests.
-7. Sandbox seller balances can remain pending and block refunds, despite using test money. Whop's [sandbox guide](https://whop.com/blog/whop-sandbox/) describes asynchronous refund settlement and cancellation as a separate operation; the public deployment later reproduced a successful full refund.
-
-## Not established yet
-
-This is an alpha prototype, not production certification. Live-money processing, tax/FX refund reconciliation, authentication challenges, failed renewals, trial transitions, PostgreSQL concurrency, upgrade compatibility across the full supported Pay range and full accessibility checks remain unverified.
+The public playground intentionally has no seller administration or money-transfer controls. Marketplace buyers use a preconfigured sandbox seller. Invoice controls create drafts until the account can issue invoices. Secrets stay in private environment settings. The app's encrypted session lasts 30 days; reusing the same Whop buyer in an unrelated new session can trigger the adapter's deliberate identity-conflict protection.

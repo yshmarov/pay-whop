@@ -5,7 +5,7 @@ Gem::Specification.new do |spec|
   spec.version = Pay::Whop::VERSION
   spec.authors = ["Yaroslav Shmarov"]
   spec.summary = "Whop payments for the Pay Rails engine"
-  spec.description = "A community Pay adapter for Whop hosted checkout, recurring memberships, cancellation, refunds and verified webhooks."
+  spec.description = "A community Pay adapter for Whop checkout, subscriptions, saved methods, invoices, refunds, marketplace subaccounts and verified webhooks."
   spec.homepage = "https://github.com/yshmarov/pay-whop"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.3"

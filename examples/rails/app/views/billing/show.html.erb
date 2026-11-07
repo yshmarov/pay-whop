@@ -4,9 +4,14 @@
     <div>
       <p class="eyebrow">An open-source Rails payment adapter</p>
       <h1 id="hero-title">Whop checkout.<br>Rails all the way back.</h1>
-      <p class="intro">Make a test payment. Watch a verified webhook update your Rails subscription. Cancel it, resume it, and inspect the result.</p>
+      <p class="intro">Try one-time payments, subscriptions and marketplace checkout. Watch verified webhooks update Rails, then explore refunds and billing controls.</p>
       <% if @customer %>
-        <%= button_to "Open Whop sandbox checkout →", checkout_path, class: "btn" %>
+        <div class="actions">
+          <%= button_to "Subscription checkout →", checkout_path, class: "btn" %>
+          <%= button_to "$5 one-time purchase", checkout_path(flow: "one_time"), class: "btn secondary" %>
+          <% if @marketplace_enabled %><%= button_to "$5 marketplace purchase", checkout_path(flow: "marketplace"), class: "btn secondary" %><% end %>
+          <%= button_to "Save a test payment method", checkout_path(flow: "setup"), class: "btn secondary" %>
+        </div>
       <% else %>
         <%= button_to "Start your sandbox session →", start_session_path, class: "btn" %>
       <% end %>
@@ -31,7 +36,7 @@ user.payment_processor.subscribed? # true</code></pre>
   <section class="steps" aria-label="How to try the demo">
     <div><div class="step-number">01 / CHECK OUT</div><h3>Pay with a test card</h3><p class="muted">Open the hosted checkout and sign into a Whop sandbox account. Use the test details below.</p></div>
     <div><div class="step-number">02 / SYNC</div><h3>Let the webhook arrive</h3><p class="muted">Whop signs the event. The adapter verifies it, fetches the current state and updates Pay.</p></div>
-    <div><div class="step-number">03 / EXPLORE</div><h3>Control your subscription</h3><p class="muted">Schedule a cancellation or keep your subscription. Only your session's records appear here.</p></div>
+    <div><div class="step-number">03 / EXPLORE</div><h3>Control your subscription</h3><p class="muted">Pause billing, cancel, resume or refund a payment. Marketplace purchases include a $1 platform fee. Only your session's records appear here.</p></div>
   </section>
   <section class="panel" aria-labelledby="billing-title">
     <div class="panel-head"><div><h2 id="billing-title">Your sandbox billing</h2><p class="muted"><%= @customer ? "Session ready. Billing changes appear after Whop confirms them." : "Start a session to create your own test customer." %></p></div><%= link_to "Refresh status", root_path(anchor: "billing-title"), class: "btn secondary" %></div>
@@ -42,22 +47,32 @@ user.payment_processor.subscribed? # true</code></pre>
       <div class="table"><table><thead><tr><th scope="col">Subscription</th><th scope="col">State</th><th scope="col">Period ends</th><th scope="col">Action</th></tr></thead><tbody>
         <% @subscriptions.each do |subscription| %><tr>
           <td><code><%= subscription.processor_id %></code></td>
-          <td class="status"><%= subscription.status.humanize %><%= " · cancellation scheduled" if subscription.on_grace_period? %></td>
+          <td class="status"><%= subscription.status.humanize %><%= " · billing paused" if subscription.paused? %><%= " · cancellation scheduled" if subscription.on_grace_period? %></td>
           <td><%= subscription.current_period_end&.strftime("%d %b %Y, %H:%M UTC") || "—" %></td>
-          <td><% if subscription.resumable? %><%= button_to "Keep subscription", resume_subscription_path(subscription), class: "btn secondary" %><% elsif subscription.active? %><%= button_to "Cancel at period end", cancel_subscription_path(subscription), class: "btn secondary" %><% end %></td>
+          <td><% if subscription.resumable? %><%= button_to(subscription.paused? ? "Resume billing" : "Keep subscription", resume_subscription_path(subscription), class: "btn secondary") %><% elsif subscription.active? %><div class="actions"><%= button_to "Cancel at period end", cancel_subscription_path(subscription), class: "btn secondary" %><%= button_to "Pause billing", pause_subscription_path(subscription), class: "btn secondary" %></div><% end %></td>
         </tr><% end %>
       </tbody></table></div>
     <% end %>
     <h3 style="margin-top:28px">Payments</h3>
     <% if @charges.empty? %><p class="empty">No successful payment yet.</p><% else %>
       <div class="table"><table><thead><tr><th scope="col">Payment</th><th scope="col">Paid</th><th scope="col">Refunded</th><th scope="col">Action</th></tr></thead><tbody>
-        <% @charges.each do |charge| %><tr><td><code><%= charge.processor_id %></code></td><td><%= charge.amount_with_currency %></td><td><%= charge.amount_refunded_with_currency %></td><td><%= button_to "Request test refund", refund_charge_path(charge), class: "btn secondary" unless charge.full_refund? %></td></tr><% end %>
+        <% @charges.each do |charge| %><tr><td><code><%= charge.processor_id %></code><% if charge.customer.account_id != Pay::Whop.account_id %><br><small>Marketplace seller</small><% end %></td><td><%= charge.amount_with_currency %></td><td><%= charge.amount_refunded_with_currency %></td><td><% unless charge.full_refund? %><div class="actions"><%= button_to "Refund remaining amount", refund_charge_path(charge), class: "btn secondary" %><% if charge.currency == "usd" && charge.amount - charge.amount_refunded.to_i > 100 %><%= button_to "Refund $1", refund_charge_path(charge, partial: "1"), class: "btn secondary" %><% end %></div><% end %></td></tr><% end %>
       </tbody></table></div>
     <% end %>
     <p class="muted">Refunds can be unavailable while Whop's sandbox seller funds are pending. A refund does not cancel your subscription.</p>
   </section>
+  <% if @customer&.processor_id.present? %>
+    <section class="panel" aria-labelledby="saved-title">
+      <h2 id="saved-title">Saved methods and invoices</h2>
+      <p class="muted">Test a $5 charge using a method saved with Whop. Each session can make one saved-method charge and create one draft invoice. Issuing invoices requires Whop account verification.</p>
+      <%= button_to "Refresh saved methods", sync_payment_methods_path, class: "btn secondary" %>
+      <% @methods.each do |method| %><p><%= method.brand || method.payment_method_type %> ···· <%= method.last4 %></p><%= button_to "Charge $5 to this test method", saved_charge_path(payment_method_id: method.processor_id), class: "btn secondary" %><% end %>
+      <% if ENV["WHOP_ONE_TIME_VARIANT_ID"].present? %><p><%= button_to "Create a $5 draft invoice", create_invoice_path, class: "btn secondary" %></p><% end %>
+      <% @invoices.each do |invoice| %><p>Invoice <%= invoice.data["number"] || invoice.processor_id %> · <%= invoice.status.humanize %> <% if invoice.checkout_url.present? && URI.parse(invoice.checkout_url).host == "sandbox.whop.com" %>· <%= link_to "Open invoice", invoice.checkout_url %><% end %></p><% end %>
+    </section>
+  <% end %>
   <section class="details" aria-label="Test instructions and source code">
     <div class="panel"><h2>Your test card</h2><p class="test-card">4242 4242 4242 4242</p><p class="muted">Any future expiry · any 3-digit CVC<br>Use fictional billing details. Never enter a real card.</p><p class="muted">The checkout displays the configured test price and any tax before you submit. All amounts are sandbox money.</p></div>
-    <div class="panel"><h2>Use it in your Rails app</h2><p class="muted">The demo runs the same gem in this repository. Follow the setup guide for checkout, migrations and webhook configuration.</p><p><a href="https://github.com/yshmarov/pay-whop">Explore the gem on GitHub →</a></p><p class="muted">Alpha: checkout, subscriptions, cancellation and full-refund requests. Plan swaps, seats and partial refunds are not supported yet.</p></div>
+    <div class="panel"><h2>Use it in your Rails app</h2><p class="muted">The demo runs the same gem in this repository. Follow the setup guide for checkout, migrations and webhook configuration.</p><p><a href="https://github.com/yshmarov/pay-whop">Explore the gem on GitHub →</a></p><p class="muted">Alpha: one-time and recurring checkout, marketplace fees, saved methods, invoices, partial refunds and subscription controls. Plan swaps, seat changes and metered billing remain unsupported.</p></div>
   </section>
 </main>

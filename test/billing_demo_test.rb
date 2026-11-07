@@ -74,4 +74,32 @@ class BillingDemoTest < ActionDispatch::IntegrationTest
     get "/up"
     assert_response :ok
   end
+  test "one-time and setup checkouts have independent cached links" do
+    begin_demo
+    api(:post, "checkout_configurations", {id: "ch_once", purchase_url: "https://sandbox.whop.com/checkout/once"})
+      .with { |request| JSON.parse(request.body)["mode"] == "payment" }
+    api(:post, "checkout_configurations", {id: "ch_setup", purchase_url: "https://sandbox.whop.com/checkout/setup"})
+      .with { |request| JSON.parse(request.body)["mode"] == "setup" }
+    post "/checkout", params: {flow: "one_time", authenticity_token: csrf_token}
+    assert_redirected_to "https://sandbox.whop.com/checkout/once"
+    get "/"
+    post "/checkout", params: {flow: "setup", authenticity_token: csrf_token}
+    assert_redirected_to "https://sandbox.whop.com/checkout/setup"
+    assert_equal 2, User.order(:id).last.checkout_urls.size
+  end
+
+  test "unsupported checkout flows fail before calling Whop" do
+    begin_demo
+    post "/checkout", params: {flow: "anything", authenticity_token: csrf_token}
+    assert_response :bad_request
+  end
+
+  test "a stranger cannot pause a subscription or select a foreign saved method" do
+    @customer.update!(processor_id: "mber_private")
+    subscription = @customer.subscriptions.create!(name: "default", processor_id: "mem_private", processor_plan: "plan_test", status: "active", quantity: 1)
+    begin_demo
+    post "/subscriptions/#{subscription.id}/pause", params: {authenticity_token: csrf_token}
+    assert_response :not_found
+    assert_not_requested :post, %r{memberships/mem_private/pause}
+  end
 end

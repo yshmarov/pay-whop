@@ -32,7 +32,10 @@ class ChargeTest < ActiveSupport::TestCase
     charge = Pay::Whop::Charge.sync("pay_test")
     request = api(:post, "payments/pay_test/refund", payment(refunded_amount: money("10.43")))
       .with(headers: {"Idempotency-Key" => "refund-attempt-1"})
-    api(:get, "payments/pay_test", payment(refunded_amount: money("10.43"), updated_at: "2026-11-08T00:00:00Z"))
+    stub_request(:get, "https://sandbox-api.whop.com/api/v1/payments/pay_test").to_return(
+      {status: 200, body: payment.to_json, headers: {"Content-Type" => "application/json"}},
+      {status: 200, body: payment(refunded_amount: money("10.43"), updated_at: "2026-11-08T00:00:00Z").to_json, headers: {"Content-Type" => "application/json"}}
+    )
     charge.refund!(idempotency_key: "refund-attempt-1")
     assert charge.full_refund?
     assert_requested request

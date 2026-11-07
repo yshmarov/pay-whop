@@ -4,7 +4,7 @@ Whop hosted checkout and recurring billing for [Pay](https://github.com/pay-rail
 
 **[Try the public sandbox demo →](https://pay-whop.onrender.com/)** — checkout, subscriptions, cancellation and refunds with test money. Free hosting can take about a minute to wake up.
 
-**Early community adapter, not an official Whop or Pay integration.** Start in Whop's sandbox. This first version targets a single Whop seller account per Rails application and ordinary fixed-price subscriptions.
+**Early community adapter, not an official Whop or Pay integration.** Start in Whop's sandbox. The alpha supports direct billing and registered Whop subaccounts. Use one platform account and one environment per Rails database.
 
 ```ruby
 user.set_payment_processor(:whop)
@@ -30,13 +30,18 @@ user.payment_processor.charges.last.refund!
 | Link a Rails customer using signed checkout metadata | Implemented; never matched by email |
 | Recurring membership and successful payment synchronization | Implemented |
 | Cancel at period end, cancel immediately, reverse a pending cancellation | Implemented |
-| Refund the remaining payment balance | Verified in sandbox; pending seller funds can delay refunds |
+| Full and partial refunds | Implemented; exact partial refund verified in sandbox |
 | Verified webhooks, duplicate record prevention, stale snapshot protection | Implemented |
 | Trial and past-due state synchronization | Implemented; provider behavior still needs sandbox coverage |
-| Arbitrary partial refunds, plan swaps, seat quantities, billing pauses | Not supported |
-| Direct card charging, payment-method management, marketplace payouts | Not supported |
-| Multiple seller accounts or mixing sandbox and production in one database | Not supported |
-| Whop one-time purchases as subscriptions | Not mapped; successful payments still become Pay charges |
+| Pause/resume billing, one-time entitlements, free days and promo codes | Implemented; see provider-state caveats in the advanced guide |
+| Saved methods, direct charging, authorization/capture/void | Implemented; saved-method charging verified in sandbox |
+| Draft/issued invoices, invoice settlement and dispute workflows | Implemented; invoice issuance requires account verification |
+| Subaccounts, onboarding/payout links, application fees, transfers | Implemented; settlement depends on provider capabilities and available balance |
+| Plan swaps, proration, recurring seat changes, metered usage | Not supported |
+| Seller isolation under one platform | Implemented; never mix sandbox and production in one database |
+| One-time purchases | Implemented as Pay charges, not recurring subscriptions |
+
+See [advanced usage](docs/advanced-usage.md) for one-time purchases, saved cards, invoices, marketplace fees and payouts, and dispute workflows.
 
 Unsupported adapter operations raise `Pay::NotSupportedError`. The SDK remains available through `Pay::Whop.client`, but SDK calls alone do not synchronize Pay records.
 
@@ -79,7 +84,7 @@ class User < ApplicationRecord
 end
 ```
 
-The gem mounts `POST /pay/whop/webhooks`. Register a webhook on the same Whop account and API version, using the event names in `Pay::Whop::Delivery::EVENTS`. Supply its signing secret verbatim, including the `ws_` prefix.
+The gem mounts `POST /pay/whop/webhooks`. For marketplaces, enable subaccount events on the platform webhook. Register a webhook on the same Whop account and API version, using the event names in `Pay::Whop::Delivery::EVENTS`. Supply its signing secret verbatim, including the `ws_` prefix.
 
 Use an Account API key with permissions for checkout configuration creation, member reads, membership reads/updates/cancellation, and payment reads/refunds. Product/variant and webhook-management permissions are needed only if your application provisions those resources. Whop's sandbox Admin role can create checkouts; its `accounts.me` endpoint additionally requires balance-read access, so the connection checker deliberately uses the checkout API.
 
@@ -93,7 +98,7 @@ Run an Active Job worker. Production needs a durable queue adapter. The example 
 4. Pay records are updated under a customer row lock. Provider `updated_at` values prevent older snapshots from overwriting newer ones. API calls run outside database transactions.
 5. Payment records become Pay charges only when their provider status is `paid`. A checkout redirect, pending payment or authorized card is not a paid charge.
 
-A Whop member can belong to only one Pay customer in this application. Conflicting links fail explicitly. Switching seller accounts or environments requires a separate database; it must not relink existing billing records.
+A Whop member can belong to only one Pay customer in this application. Conflicting links fail explicitly. Marketplace buyers use separate seller-scoped customer records created by `merchant.customer_for(user)`; changing the configured platform or environment requires a separate database.
 
 Duplicate webhook jobs may run, but synchronization does not create duplicate charges or subscriptions. This is not an exactly-once notification system. This version does not send Pay receipts or subscription emails; Whop's own messaging settings remain in effect.
 
@@ -111,10 +116,10 @@ Keep a periodic recovery job for pending deliveries: a process can stop after th
 
 - Whop variants map to Pay's `processor_plan`, memberships to subscriptions, members to customers, and payments to charges.
 - A scheduled cancellation retains access through the current billing period. `resume` reverses that scheduled cancellation; it does not reactivate an ended subscription.
-- `refund!` asks Whop to refund the remaining balance, then retrieves current payment and membership state. Refunds settle asynchronously and do not themselves cancel a subscription; cancel separately when access should end. Insufficient seller funds raise an SDK error and leave the local refund amount unchanged.
+- `refund!` asks Whop to refund the remaining balance, or the specified integer minor-unit amount, then retrieves current payment and membership state. Refunds settle asynchronously and do not themselves cancel a subscription; cancel separately when access should end. Insufficient seller funds raise an SDK error and leave the local refund amount unchanged.
 - Pay stores integer minor units. Whop money objects are converted with `BigDecimal` and the provider's currency precision, without rounding fractions away.
 - Amounts currently use Whop's account-facing `total` and `refunded_amount`, not buyer fees. Currency mismatches are rejected; adaptive-pricing/FX refunds and tax reconciliation require further validation before enabling them.
-- Supply a stable `idempotency_key:` for each checkout, cancellation, resumption or refund attempt. Reuse it when retrying the same operation after a timeout. A new operation needs a new key. SDK automatic retries are disabled so unexamined writes are not automatically repeated.
+- Supply a stable `idempotency_key:` for each checkout, charge, cancellation, resumption, invoice, transfer or refund attempt. Reuse it when retrying the same operation after a timeout. A new operation needs a new key. SDK automatic retries are disabled so unexamined writes are not automatically repeated.
 
 ## Run the example
 
