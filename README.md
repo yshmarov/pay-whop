@@ -2,6 +2,8 @@
 
 Whop hosted checkout and recurring billing for [Pay](https://github.com/pay-rails/pay), the Ruby on Rails payments engine.
 
+**[Try the public sandbox demo →](https://pay-whop.onrender.com/)** — checkout, subscriptions, cancellation and refunds with test money. Free hosting can take about a minute to wake up.
+
 **Early community adapter, not an official Whop or Pay integration.** Start in Whop's sandbox. This first version targets a single Whop seller account per Rails application and ordinary fixed-price subscriptions.
 
 ```ruby
@@ -28,7 +30,7 @@ user.payment_processor.charges.last.refund!
 | Link a Rails customer using signed checkout metadata | Implemented; never matched by email |
 | Recurring membership and successful payment synchronization | Implemented |
 | Cancel at period end, cancel immediately, reverse a pending cancellation | Implemented |
-| Refund the remaining payment balance | Implemented; sandbox success blocked by pending seller funds |
+| Refund the remaining payment balance | Verified in sandbox; pending seller funds can delay refunds |
 | Verified webhooks, duplicate record prevention, stale snapshot protection | Implemented |
 | Trial and past-due state synchronization | Implemented; provider behavior still needs sandbox coverage |
 | Arbitrary partial refunds, plan swaps, seat quantities, billing pauses | Not supported |
@@ -42,11 +44,11 @@ Requires Ruby 3.3+, Pay 12.3–12.x, and `whop_sdk` 2.7.x. The bundled demo uses
 
 ## Install in a Rails application
 
-Until published, use a local checkout:
+Until published on RubyGems, install from GitHub:
 
 ```ruby
 # Gemfile
-gem "pay-whop", path: "../pay-whop"
+gem "pay-whop", git: "https://github.com/yshmarov/pay-whop", branch: "main"
 ```
 
 Install both engines' migrations, including Pay's STI and object-column migrations:
@@ -81,7 +83,7 @@ The gem mounts `POST /pay/whop/webhooks`. Register a webhook on the same Whop ac
 
 Use an Account API key with permissions for checkout configuration creation, member reads, membership reads/updates/cancellation, and payment reads/refunds. Product/variant and webhook-management permissions are needed only if your application provisions those resources. Whop's sandbox Admin role can create checkouts; its `accounts.me` endpoint additionally requires balance-read access, so the connection checker deliberately uses the checkout API.
 
-Run an Active Job worker. Production needs a durable queue adapter; the example's in-process `:async` adapter is for local development only.
+Run an Active Job worker. Production needs a durable queue adapter. The example uses PostgreSQL-backed GoodJob in production and the in-memory `:async` adapter for local development.
 
 ## How synchronization works
 

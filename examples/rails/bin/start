@@ -3,4 +3,4 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 bundle exec examples/rails/bin/setup
 cd examples/rails
-exec bundle exec puma -b "tcp://0.0.0.0:${PORT:-3001}" -t 2:5
+exec bundle exec puma -b "tcp://0.0.0.0:${PORT:-3001}" -t 2:5 -w 0
