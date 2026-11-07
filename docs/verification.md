@@ -11,7 +11,7 @@ Local verification date: 7 November 2026.
 - Whop API version `2026-10-28-1`
 - SQLite 2.10.2 gem
 
-CI is configured for Ruby 3.3, 3.4 and 4.0 on Linux. Those hosted jobs have not run yet.
+GitHub Actions passed tests and Standard Ruby linting on Ruby 3.3, 3.4 and 4.0 on Linux: [initial alpha CI run](https://github.com/yshmarov/pay-whop/actions/runs/42360234899), 7 November 2026.
 
 ## Automated coverage
 
