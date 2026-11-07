@@ -1,21 +1,41 @@
 class BillingController < ActionController::Base
   layout "application"
-  before_action :authenticate_demo
   before_action :load_customer
+  before_action :require_customer, except: [:show, :start]
+  rate_limit to: 10, within: 1.minute, only: [:start, :checkout, :cancel, :resume, :refund], with: -> { redirect_to root_path, alert: "Please wait a minute before trying again." }
 
   rescue_from Pay::Error, Whop_sdk::Errors::ApiError do |error|
-    redirect_to root_path, alert: "The operation did not complete (#{error.class.name}). Check the server and Whop dashboard before retrying."
+    message = if error.message.include?("not_enough_balance")
+      "Whop cannot refund this test payment while the seller's sandbox funds are pending. Your payment has not been marked refunded."
+    else
+      "Whop could not complete that operation. Your confirmed billing state is shown below. Please try again later."
+    end
+    redirect_to root_path, alert: message
   end
 
   def show
-    @subscriptions = @customer.subscriptions.order(created_at: :desc)
-    @charges = @customer.charges.order(created_at: :desc)
-    @pending_deliveries = Pay::Whop::Delivery.pending.count
+    @subscriptions = @customer ? @customer.subscriptions.order(created_at: :desc) : []
+    @charges = @customer ? @customer.charges.order(created_at: :desc) : []
+  end
+
+  def start
+    unless @customer
+      user = User.create!(email: "#{SecureRandom.uuid}@demo.example.test", checkout_key: SecureRandom.uuid)
+      session[:demo_user_id] = user.id
+      user.set_payment_processor(:whop)
+    end
+    redirect_to root_path
   end
 
   def checkout
-    checkout = @customer.checkout(variant_id: ENV.fetch("WHOP_VARIANT_ID"), redirect_url: ENV.fetch("WHOP_RETURN_URL"))
-    redirect_to checkout.purchase_url, allow_other_host: true
+    user = @customer.owner
+    if user.checkout_url.blank?
+      checkout = @customer.checkout(variant_id: ENV.fetch("WHOP_VARIANT_ID"), redirect_url: ENV.fetch("WHOP_RETURN_URL"), idempotency_key: user.checkout_key)
+      uri = URI.parse(checkout.purchase_url)
+      raise Pay::Whop::Error, "Expected sandbox checkout" unless uri.scheme == "https" && uri.host == "sandbox.whop.com"
+      user.update!(checkout_url: checkout.purchase_url)
+    end
+    redirect_to user.checkout_url, allow_other_host: true
   end
 
   def cancel
@@ -35,16 +55,12 @@ class BillingController < ActionController::Base
 
   private
 
-  def authenticate_demo
-    password = ENV["DEMO_PASSWORD"]
-    return head :service_unavailable if password.blank?
-    authenticate_or_request_with_http_basic("pay-whop demo") do |user, provided|
-      user == "demo" && ActiveSupport::SecurityUtils.secure_compare(provided, password)
-    end
+  def load_customer
+    user = User.find_by(id: session[:demo_user_id]) if session[:demo_user_id]
+    @customer = user&.payment_processor
   end
 
-  def load_customer
-    user = User.find_by!(email: "demo@example.test")
-    @customer = user.payment_processor || user.set_payment_processor(:whop)
+  def require_customer
+    redirect_to root_path, alert: "Start a sandbox session first." unless @customer
   end
 end

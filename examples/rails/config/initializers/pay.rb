@@ -9,3 +9,4 @@ Pay::Whop.configure do |config|
   config.webhook_secret = ENV["WHOP_WEBHOOK_SECRET"]
   config.environment = ENV.fetch("WHOP_ENVIRONMENT", "sandbox")
 end
+raise "The playground only supports Whop sandbox" unless Pay::Whop.environment == "sandbox"

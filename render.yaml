@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: pay-whop
+    runtime: ruby
+    plan: free
+    region: frankfurt
+    buildCommand: bundle install
+    startCommand: examples/rails/bin/start
+    healthCheckPath: /up
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: RAILS_ENV
+        value: production
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: WHOP_ENVIRONMENT
+        value: sandbox
+      - key: WHOP_API_KEY
+        sync: false
+      - key: WHOP_ACCOUNT_ID
+        sync: false
+      - key: WHOP_VARIANT_ID
+        sync: false
+      - key: WHOP_WEBHOOK_SECRET
+        sync: false
+      - key: WHOP_RETURN_URL
+        sync: false

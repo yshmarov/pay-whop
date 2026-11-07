@@ -9,6 +9,8 @@ ActiveRecord::Migration.verbose = false
 ActiveRecord::Schema.define do
   create_table(:users, force: true) { |t|
     t.string :email
+    t.string :checkout_key
+    t.text :checkout_url
     t.timestamps
   }
 end
