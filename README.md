@@ -1,8 +1,8 @@
 # pay-whop
 
-Whop hosted checkout and recurring billing for [Pay](https://github.com/pay-rails/pay), the Ruby on Rails payments engine.
+Whop payments, recurring billing and marketplace subaccounts for [Pay](https://github.com/pay-rails/pay), the Ruby on Rails payments engine.
 
-**[Try the public sandbox demo →](https://pay-whop.onrender.com/)** — checkout, subscriptions, cancellation and refunds with test money. Free hosting can take about a minute to wake up.
+**[Try the public sandbox demo →](https://pay-whop.onrender.com/)** — one-time payments, subscriptions, marketplace fees, saved methods and refunds with test money. Free hosting can take about a minute to wake up.
 
 **Early community adapter, not an official Whop or Pay integration.** Start in Whop's sandbox. The alpha supports direct billing and registered Whop subaccounts. Use one platform account and one environment per Rails database.
 
@@ -148,7 +148,7 @@ bundle exec examples/rails/bin/reconcile
 
 `render.yaml` defines a free Rails web service. Supply a separate persistent PostgreSQL database (for example, Neon Free); Render’s free database expires after 30 days. The app uses GoodJob with PostgreSQL-backed jobs, bounded retries and a recovery job for recent pending deliveries. It only boots against Whop sandbox. Free hosting has usage limits and the web service sleeps when idle.
 
-Set the listed environment variables in the host’s secret settings. Set `WHOP_RETURN_URL` to the public HTTPS root URL, register `/pay/whop/webhooks` with Whop using the adapter’s event list and dated API version, then set `WHOP_WEBHOOK_SECRET`. `examples/rails/bin/start` applies migrations and starts Puma. Keep a stable `SECRET_KEY_BASE`: changing it invalidates sessions and the customer references already stored in Whop.
+Set the listed environment variables in the host’s secret settings. Optionally set `DEMO_MERCHANT_ID` to a registered sandbox subaccount to show marketplace checkout, and `WHOP_ONE_TIME_VARIANT_ID` to a USD 5.00 one-time variant to show draft invoices. Set `WHOP_RETURN_URL` to the public HTTPS root URL, register `/pay/whop/webhooks` with Whop using the adapter’s event list and dated API version, then set `WHOP_WEBHOOK_SECRET`. `examples/rails/bin/start` applies migrations and starts Puma. Keep a stable `SECRET_KEY_BASE`: changing it invalidates sessions and the customer references already stored in Whop.
 
 Never expose the local developer database or reuse a production Whop API key for this demo. The public app has no admin interface and never accepts visitor API keys.
 

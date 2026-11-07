@@ -6,7 +6,7 @@ Verification date: 7 November 2026. Release: `0.1.0.alpha.2`.
 
 Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
 
-The local suite passes **65 tests / 207 assertions** and Standard Ruby linting. GitHub Actions exercises Ruby 3.3, 3.4 and 4.0; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
+The local suite passes **65 tests / 207 assertions** and Standard Ruby linting. The same checks passed on Ruby 3.3, 3.4 and 4.0 in [GitHub Actions](https://github.com/yshmarov/pay-whop/actions/runs/42368971131).
 
 Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries.
 
@@ -20,20 +20,25 @@ The [hosted playground](https://pay-whop.onrender.com/) uses the adapter and rec
 | Cancellation | Immediate and period-end cancellation, and reversal of scheduled cancellation, verified |
 | Full refund | Provider reported USD 24.00 refunded; local Pay charge agreed |
 | Saved payment methods | Retrieved a method through the linked member and selected the adapter's local default |
+| Hosted setup checkout | Saved the test method without a charge; signed `setup_intent.succeeded` delivery processed |
+| Hosted one-time checkout | Paid USD 6.00 including tax; signed webhook created a charge without a recurring subscription |
+| Authorization / capture / void | Two payments became `authorized`; capture became `paid` with a Pay charge, void became `void` without a Pay charge |
 | Direct one-time saved-method payment | Initially `open`, later `paid`; USD 6.00 including tax, with no recurring subscription |
 | Partial refund | Requested 100 minor units; provider and Pay reported exactly USD 1.00 refunded from the USD 6.00 payment |
 | Pause / resume billing | Provider reported `paused_at`; adapter showed billing paused while retaining paid-period access; resume cleared the pause |
 | Free days | Added one day and observed the changed provider period end |
-| Draft invoice | Created and persisted a USD 5.00 draft |
+| Draft invoice | Created and persisted a USD 5.00 draft; generated an HTTPS invoice PDF URL |
 | Invoice issue | Whop rejected issuance: account verification required. Draft remained unissued |
 | Subaccount creation | Created a sandbox seller and verified its parent account before registering it locally |
 | Hosted onboarding and payout links | Both generated valid sandbox Whop URLs after the required scopes were configured |
-| Marketplace checkout | Created a USD 5.00 subaccount checkout configured with a USD 1.00 platform fee |
+| Marketplace checkout | Completed a USD 5.00 subaccount checkout; provider reported USD 6.00 including tax. The fee report confirmed a collected USD 1.00 application fee; the signed child event created a charge under the seller-scoped customer |
 | Platform transfer | Whop rejected the request because the platform business is not verified; no transfer was recorded as successful |
 | Visitor isolation | A separate hosted visitor could not see or cancel/refund another visitor's records; cross-customer actions returned 404 |
 | Queue and deployment | PostgreSQL migrations, eager loading and persisted GoodJob execution verified; earlier deployment-time webhook failures recovered on Whop retry |
 
-A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Authentication challenges, dispute submission and evidence upload, authorization/capture/void, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
+A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Authentication challenges, dispute submission and evidence upload, one-time entitlement reactivation, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
+
+The hosted webhook subscribes to all 26 adapter events with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. Desktop layout was inspected; the browser viewport override did not apply, so a fresh mobile visual check remains outstanding.
 
 ## Integration findings
 
@@ -45,7 +50,8 @@ A generated checkout or payout URL is not proof of settled payment or bank withd
 6. Under Rails, SDK objects must be converted via `to_h` before JSON serialization. Nullable SDK values can normalize to empty hashes; non-renewing memberships and unsettled transfer amounts are handled accordingly.
 7. Whop's membership pause is reflected in `most_recent_action`, while the billing status can remain `active`. Pay access remains available through the current paid period.
 8. Successful API responses may describe a pending operation. Neither a checkout return, an HTTP 200 nor a created transfer is treated as settlement.
-9. Refunds and transfers can fail due to available balance or account capabilities, even in the sandbox. The adapter does not bypass identity verification.
+9. Immediate cancellation can leave `cancel_at_period_end: true` on the provider object. Terminal status and `canceled_at` take precedence so ended subscriptions cannot retain access or appear resumable.
+10. Refunds and transfers can fail due to available balance or account capabilities, even in the sandbox. The adapter does not bypass identity verification.
 
 ## Remaining limits
 
