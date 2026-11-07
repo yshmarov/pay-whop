@@ -1,0 +1,47 @@
+<main>
+  <p class="muted">Community adapter · Sandbox demo</p>
+  <h1>Whop payments, Rails conventions.</h1>
+  <p>Hosted checkout with subscriptions and payments synchronized into Pay.</p>
+  <% if flash[:alert] %><p class="notice" role="alert"><%= flash[:alert] %></p><% end %>
+  <%= button_to "Open sandbox checkout", checkout_path %>
+  <p class="muted">Returning from checkout does not confirm payment. Refresh this page after Whop delivers the webhook.</p>
+  <h2>Subscriptions</h2>
+  <% if @subscriptions.empty? %>
+    <p>No recurring membership has been synchronized yet.</p>
+  <% else %>
+    <div class="table"><table>
+      <thead><tr><th scope="col">Plan</th><th scope="col">State</th><th scope="col">Period ends</th><th scope="col">Action</th></tr></thead>
+      <tbody><% @subscriptions.each do |subscription| %>
+        <tr>
+          <td><%= subscription.processor_plan %></td>
+          <td><%= subscription.status %><%= " · cancellation scheduled" if subscription.on_grace_period? %></td>
+          <td><%= subscription.current_period_end&.strftime("%Y-%m-%d %H:%M UTC") || "—" %></td>
+          <td>
+            <% if subscription.resumable? %>
+              <%= button_to "Keep subscription", resume_subscription_path(subscription) %>
+            <% elsif subscription.active? %>
+              <%= button_to "Cancel at period end", cancel_subscription_path(subscription) %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %></tbody>
+    </table></div>
+  <% end %>
+  <h2>Payments</h2>
+  <% if @charges.empty? %>
+    <p>No successful payment has been synchronized yet.</p>
+  <% else %>
+    <div class="table"><table>
+      <thead><tr><th scope="col">Payment</th><th scope="col">Amount</th><th scope="col">Refunded</th><th scope="col">Action</th></tr></thead>
+      <tbody><% @charges.each do |charge| %>
+        <tr>
+          <td><%= charge.processor_id %></td>
+          <td><%= charge.amount_with_currency %></td>
+          <td><%= charge.amount_refunded_with_currency %></td>
+          <td><%= button_to "Refund remaining balance", refund_charge_path(charge) unless charge.full_refund? %></td>
+        </tr>
+      <% end %></tbody>
+    </table></div>
+  <% end %>
+  <p class="muted"><%= pluralize(@pending_deliveries, "webhook") %> awaiting successful processing.</p>
+</main>

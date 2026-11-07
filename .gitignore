@@ -1,0 +1,12 @@
+/.bundle/
+/vendor/
+/pkg/
+*.gem
+.env
+.env.*
+!.env.example
+/log/
+/tmp/
+/examples/rails/log/
+/examples/rails/tmp/
+/examples/rails/storage/

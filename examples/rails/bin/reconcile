@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+Pay::Whop::Delivery.pending.find_each { |delivery| Pay::Whop::ProcessDeliveryJob.perform_now(delivery) }
+puts "Pending webhook deliveries processed."

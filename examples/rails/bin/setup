@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+require "fileutils"
+ENV["RAILS_ENV"] ||= "development"
+require_relative "../config/environment"
+raise "This example runs only in the sandbox" unless Pay::Whop.environment == "sandbox"
+FileUtils.mkdir_p(File.expand_path("../storage", __dir__))
+ActiveRecord::Base.establish_connection
+ActiveRecord::Migration.verbose = false
+unless ActiveRecord::Base.connection.table_exists?(:users)
+  ActiveRecord::Schema.define do
+    create_table(:users) { |t|
+      t.string :email, null: false
+      t.timestamps
+    }
+  end
+end
+migrations = Dir[File.join(Gem::Specification.find_by_name("pay").full_gem_path, "db/migrate/*.rb")].sort
+migrations += Dir[File.expand_path("../../../db/migrate/*.rb", __dir__)]
+ActiveRecord::MigrationContext.new(migrations.map { |path| File.dirname(path) }.uniq).migrate
+User.find_or_create_by!(email: "demo@example.test")
+puts "Demo database ready. Set DEMO_PASSWORD in .env, then run bin/rails server -b 127.0.0.1 -p 3001."

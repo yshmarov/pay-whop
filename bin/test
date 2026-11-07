@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+cd "$(dirname "$0")/.."
+bundle exec rake test
+bundle exec standardrb

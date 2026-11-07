@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+require "bundler/setup"
+require "dotenv"
+require "whop_sdk"
+Dotenv.load(File.expand_path("../.env", __dir__))
+abort "Set WHOP_ENVIRONMENT=sandbox" unless ENV["WHOP_ENVIRONMENT"] == "sandbox"
+client = Whop_sdk::Client.new(token: ENV.fetch("WHOP_API_KEY"), environment: Whop_sdk::Environment::SANDBOX, api_version_date: "2026-10-28-1", max_retries: 0)
+client.checkout_configurations.list(account_id: ENV.fetch("WHOP_ACCOUNT_ID"), first: 1)
+puts "Sandbox checkout API connection verified."
