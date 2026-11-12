@@ -1,6 +1,6 @@
 # Verification
 
-Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: `0.1.0.alpha.4`.
+Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: [`0.1.0.alpha.4` on RubyGems](https://rubygems.org/gems/pay-whop/versions/0.1.0.alpha.4). The registry SHA-256 matches the built gem tested by the installation smoke check.
 
 ## Versions and automated coverage
 
@@ -41,7 +41,7 @@ The [hosted playground](https://pay-whop.onrender.com/) uses the adapter and rec
 
 A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Completed provider authentication challenges, dispute submission and evidence upload, one-time entitlement reactivation, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
 
-The adapter event list now includes 30 events (payout changes and trial-ending notifications added); deployment updates the hosted webhook to match, with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. The earlier provider-flow review covered desktop layout; a full mobile/accessibility assessment remains outstanding.
+The deployed webhook subscribes to all 30 adapter events, including payout changes and trial-ending notifications, with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. The earlier provider-flow review covered desktop layout; a full mobile/accessibility assessment remains outstanding.
 
 ## Integration findings
 

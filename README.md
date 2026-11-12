@@ -51,15 +51,15 @@ See the [compatibility matrix](docs/compatibility.md) and [advanced usage](docs/
 
 Unsupported adapter operations raise `Pay::NotSupportedError`. The SDK remains available through `Pay::Whop.client`, but SDK calls alone do not synchronize Pay records.
 
-Requires Ruby 3.3+, Pay 12.3–12.x, and `whop_sdk` 2.7.x. The bundled demo uses Rails 8.1. API requests and webhook registration use the dated API version `2026-10-28-1`. There is no RubyGems release yet.
+Requires Ruby 3.3+, Pay 12.3–12.x, and `whop_sdk` 2.7.x. The bundled demo uses Rails 8.1. API requests and webhook registration use the dated API version `2026-10-28-1`. The current [RubyGems alpha is `0.1.0.alpha.4`](https://rubygems.org/gems/pay-whop/versions/0.1.0.alpha.4).
 
 ## Install in a Rails application
 
-Until published on RubyGems, install from GitHub:
+Install the published alpha from RubyGems:
 
 ```ruby
 # Gemfile
-gem "pay-whop", git: "https://github.com/yshmarov/pay-whop", branch: "main"
+gem "pay-whop", "0.1.0.alpha.4"
 ```
 
 Install both engines' migrations, including Pay's STI and object-column migrations:
