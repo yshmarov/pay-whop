@@ -81,7 +81,8 @@ user.payment_processor.subscribed? # true</code></pre>
     <% if @subscriptions.empty? %>
       <p class="empty">No confirmed subscription yet. Returning from checkout alone does not grant access.</p>
     <% else %>
-      <div class="table"><table><thead><tr><th scope="col">Subscription</th><th scope="col">State</th><th scope="col">Period ends</th><th scope="col">Action</th></tr></thead><tbody>
+      <p id="subscription-scroll-help" class="muted table-help">Scroll the table sideways to see every column.</p>
+      <div class="table" tabindex="0" role="region" aria-label="Subscriptions" aria-describedby="subscription-scroll-help"><table><thead><tr><th scope="col">Subscription</th><th scope="col">State</th><th scope="col">Period ends</th><th scope="col">Action</th></tr></thead><tbody>
         <% @subscriptions.each do |subscription| %><tr>
           <td><code><%= subscription.processor_id %></code></td>
           <td class="status"><%= subscription.status.humanize %><%= " · billing paused" if subscription.paused? %><%= " · cancellation scheduled" if subscription.on_grace_period? %></td>
@@ -92,7 +93,8 @@ user.payment_processor.subscribed? # true</code></pre>
     <% end %>
     <h3 style="margin-top:28px">Payments</h3>
     <% if @charges.empty? %><p class="empty">No successful payment yet.</p><% else %>
-      <div class="table"><table><thead><tr><th scope="col">Payment</th><th scope="col">Paid</th><th scope="col">Refunded</th><th scope="col">Action</th></tr></thead><tbody>
+      <p id="payment-scroll-help" class="muted table-help">Scroll the table sideways to see every column.</p>
+      <div class="table" tabindex="0" role="region" aria-label="Payments" aria-describedby="payment-scroll-help"><table><thead><tr><th scope="col">Payment</th><th scope="col">Paid</th><th scope="col">Refunded</th><th scope="col">Action</th></tr></thead><tbody>
         <% @charges.each do |charge| %><tr><td><code><%= charge.processor_id %></code><% if charge.customer.account_id != Pay::Whop.account_id %><br><small>Marketplace seller</small><% end %></td><td><%= charge.amount_with_currency %></td><td><%= charge.amount_refunded_with_currency %></td><td><% unless charge.full_refund? %><div class="actions"><%= button_to "Refund remaining amount", refund_charge_path(charge), class: "btn secondary" %><% if charge.currency == "usd" && charge.amount - charge.amount_refunded.to_i > 100 %><%= button_to "Refund $1", refund_charge_path(charge, partial: "1"), class: "btn secondary" %><% end %></div><% end %></td></tr><% end %>
       </tbody></table></div>
     <% end %>
