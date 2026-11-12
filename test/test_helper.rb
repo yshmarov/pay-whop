@@ -33,6 +33,8 @@ AddObjectToPayModels.new.migrate(:up)
 CreatePayWhopDeliveries.new.migrate(:up)
 require_relative "../db/migrate/20261107120000_create_pay_whop_resources"
 CreatePayWhopResources.new.migrate(:up)
+require_relative "../db/migrate/20261113000000_allow_shared_whop_members"
+AllowSharedWhopMembers.new.migrate(:up)
 require_relative "../examples/rails/db/migrate/20261112000000_create_demo_simulations"
 CreateDemoSimulations.new.migrate(:up)
 
@@ -45,6 +47,7 @@ class ActiveSupport::TestCase
       config.account_id = "biz_test"
       config.environment = "sandbox"
       config.webhook_secret = "ws_test_secret"
+      config.allow_shared_members = false
     end
     @user = User.create!(email: "test@example.test")
     @customer = @user.set_payment_processor(:whop,

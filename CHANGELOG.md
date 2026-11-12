@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — shared buyers
+
+- Allow hosts to opt into multiple Pay customers for one Whop member with `Pay::Whop.allow_shared_members = true`. Each payment or membership must carry a valid signed customer reference when the member is ambiguous; an already linked customer cannot change its member or seller.
+- Replace Pay's global processor/member uniqueness constraint with a non-Whop unique index and a Whop lookup index. Install the new migration before enabling shared buyers. Rolling it back requires first resolving duplicate Whop member mappings; it does not merge or delete records.
+
 ## 0.1.0.alpha.4
 
 - Keep reversed payouts terminal when overlapping reads return an older completed state, for both platform and seller payouts.

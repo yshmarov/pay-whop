@@ -33,4 +33,35 @@ class CustomerTest < ActiveSupport::TestCase
     @customer.update!(processor_id: "mber_test")
     assert_raises(Pay::Whop::IdentityError) { Pay::Whop::Customer.resolve!(payment(metadata: {"pay_customer" => "forged"})) }
   end
+
+  test "opted in shared buyers resolve only the signed customer without reassigning either owner" do
+    Pay::Whop.allow_shared_members = true
+    Pay::Whop::Customer.resolve!(payment)
+    other = User.create!(email: "shared@example.test").set_payment_processor(:whop, data: @customer.data)
+    object = payment(metadata: {"pay_customer" => other.signed_id(purpose: Pay::Whop.identity_purpose)})
+    assert_equal other, Pay::Whop::Customer.resolve!(object)
+    assert_equal "mber_test", @customer.reload.processor_id
+    assert_equal "mber_test", other.reload.processor_id
+    assert_raises(Pay::Whop::IdentityError) { Pay::Whop::Customer.resolve!(payment(metadata: {})) }
+    assert_raises(Pay::Whop::IdentityError) { Pay::Whop::Customer.resolve!(payment(metadata: {"pay_customer" => "forged"})) }
+    assert_raises(Pay::Whop::IdentityError) { Pay::Whop::Customer.resolve!(object.merge("member_id" => "mber_other")) }
+  end
+  test "shared buyer subscription lists never import another organizations membership" do
+    Pay::Whop.allow_shared_members = true
+    @customer.update!(processor_id: "mber_test")
+    other = User.create!(email: "shared-lists@example.test").set_payment_processor(:whop, data: @customer.data)
+    other.update!(processor_id: "mber_test")
+    foreign = membership(id: "mem_other", metadata: other.checkout_metadata)
+    api(:get, "memberships?account_id=biz_test&member_id=mber_test&first=100&after", {data: [membership, foreign], page_info: {has_next_page: false}})
+    api(:get, "memberships/mem_test", membership)
+    @customer.sync_subscriptions
+    assert_equal "mem_test", @customer.subscriptions.sole.processor_id
+    assert_empty other.subscriptions
+    assert_not_requested :get, "https://sandbox-api.whop.com/api/v1/memberships/mem_other"
+    %w[payments invoices].each do |endpoint|
+      api(:get, "#{endpoint}?account_id=biz_test&member_id=mber_test&first=100&after", {data: [], page_info: {has_next_page: false}})
+    end
+    assert_equal({memberships: 1, payments: 0, invoices: 0, skipped: 1}, @customer.reconcile!)
+    assert_empty other.subscriptions
+  end
 end

@@ -178,6 +178,10 @@ module Pay
         verify_configuration!
         raise Error, "Customer has not completed checkout" if processor_id.blank?
         Whop.each_page(Whop.api.memberships, account_id: account_id, member_id: processor_id) do |object|
+          Whop.verify_account!(object, expected: account_id)
+          raise IdentityError, "Subscription list returned another member" unless object["member_id"] == processor_id
+          reference = self.class.find_signed(object.dig("metadata", "pay_customer"), purpose: Whop.identity_purpose(account_id))
+          next if Whop.allow_shared_members && reference && reference != self
           verify_resource!(object)
           Subscription.sync(object.fetch("id"), account_id: account_id)
         end
@@ -193,7 +197,8 @@ module Pay
             Whop.verify_account!(object, expected: account_id)
             raise IdentityError, "Reconciliation returned another member" unless object["member_id"] == processor_id
             token = object.dig("metadata", "pay_customer")
-            if token.present? && self.class.find_signed(token, purpose: Whop.identity_purpose(account_id)).nil?
+            reference = token.present? ? self.class.find_signed(token, purpose: Whop.identity_purpose(account_id)) : nil
+            if (token.present? && reference.nil?) || (Whop.allow_shared_members && reference && reference != self)
               counts[:skipped] += 1
               ActiveSupport::Notifications.instrument("reconciliation_skipped.pay_whop", customer_id: id, resource_id: object.fetch("id"), resource_type: kind)
               next
@@ -230,11 +235,12 @@ module Pay
         token = object.dig("metadata", "pay_customer")
         signed_customer = find_signed(token, purpose: Whop.identity_purpose(account)) if token.present?
         raise IdentityError, "Invalid Pay customer reference" if token.present? && signed_customer.nil?
-        existing = find_by(processor_id: member_id)
-        if existing && signed_customer && existing.id != signed_customer.id
+        candidates = where(processor_id: member_id).select { |customer| customer.account_id == account && customer.data.to_h["whop_environment"] == Whop.environment }
+        if !Whop.allow_shared_members && signed_customer && candidates.any? { |customer| customer.id != signed_customer.id }
           raise IdentityError, "Whop member is already linked to a different Pay customer"
         end
-        customer = signed_customer || existing
+        raise IdentityError, "Shared Whop members require a signed customer reference" if signed_customer.nil? && candidates.many?
+        customer = signed_customer || candidates.first
         raise IdentityError, "Whop resource is not linked to a Pay customer" unless customer
         customer.verify_configuration!
         raise IdentityError, "Customer belongs to another seller" unless customer.account_id == account

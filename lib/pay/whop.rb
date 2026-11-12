@@ -60,6 +60,7 @@ module Pay
     mattr_accessor :environment, default: "sandbox"
     mattr_accessor :api_version, default: "2026-10-28-1"
     mattr_accessor :queue_name, default: :default
+    mattr_accessor :allow_shared_members, default: false
 
     def self.configure
       yield self
