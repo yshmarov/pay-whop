@@ -2,6 +2,8 @@
 
 All amounts accepted by adapter convenience methods are integer minor units: `500` means USD 5.00. Specify `decimals: 0` for JPY or `decimals: 3` for KWD when creating prices or transfers; refund precision comes from the original payment. Arbitrary inline `variant` prices follow Whop's API and use major units.
 
+Pay charge amounts use Whop's account-facing `total` and `refunded_amount`, rather than buyer fees. Currency mismatches are rejected. Adaptive pricing, FX refunds and tax reconciliation still require further validation.
+
 ## One-time and recurring checkout
 
 ```ruby

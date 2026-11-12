@@ -1,0 +1,30 @@
+name: Bug report
+description: Report unexpected billing or adapter behavior.
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For exploitable vulnerabilities, use [private security reporting](https://github.com/yshmarov/pay-whop/security/advisories/new).
+        Use synthetic data. Do not include API keys, webhook secrets, private checkout URLs, buyer details or card/bank data.
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions and environment
+      description: pay-whop, Ruby, Rails, Pay, Whop SDK, database and sandbox/production.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Steps or a small code example. Include the operation and relevant provider state.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include redacted HTTP status/provider error type when available. Say whether this was an HTTP fixture or an actual provider request.
+    validations:
+      required: true

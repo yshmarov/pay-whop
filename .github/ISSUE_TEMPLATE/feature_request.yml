@@ -1,0 +1,20 @@
+name: Feature request
+description: Propose a Rails or Pay workflow supported by Whop.
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Rails or Pay use case
+      description: What should the application be able to do? What is missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: provider_api
+    attributes:
+      label: Whop API support
+      description: Link the relevant API documentation, if available, and note any provider restrictions or sandbox limitations.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected public API or user-visible result, including failure states.

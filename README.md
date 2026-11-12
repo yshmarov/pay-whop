@@ -1,68 +1,71 @@
 # pay-whop
 
-Whop payments, recurring billing and marketplace subaccounts for [Pay](https://github.com/pay-rails/pay), the Ruby on Rails payments engine.
+**Whop payments for Ruby on Rails, through [Pay](https://github.com/pay-rails/pay).**
 
-**[Try the public sandbox demo →](https://pay-whop.onrender.com/)** — one-time payments, subscriptions, marketplace fees, saved methods and refunds with test money. Free hosting can take about a minute to wake up.
+[![CI](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml)
+[![RubyGems alpha](https://img.shields.io/gem/v/pay-whop?include_prereleases&label=RubyGems)](https://rubygems.org/gems/pay-whop)
+[![Ruby 3.3+](https://img.shields.io/badge/Ruby-3.3%2B-CC342D)](pay-whop.gemspec)
+[![MIT license](https://img.shields.io/github/license/yshmarov/pay-whop)](LICENSE)
 
-The demo also includes **[invoice and transfer simulations](https://pay-whop.onrender.com/#simulations)**. Start a browser session, then try invoice issuance, overdue/payment/void outcomes and transfer success/failure. No Whop account or KYC is needed for these controls. They update separate demo records with `sim_` references and a visible activity history; they never call Whop, create Pay charges, grant subscription access or generate provider webhooks. Reset each flow to try another outcome. These simulations do not certify real invoice issuance or transfer settlement.
+Hosted checkout, subscriptions, saved payment methods, refunds and marketplace subaccounts using familiar Pay models and Whop's official Ruby SDK.
 
-**Early community adapter, not an official Whop or Pay integration.** Start in Whop's sandbox. The alpha supports direct billing and registered Whop subaccounts. Use one platform account and one environment per Rails database.
+[**Try the live demo**](https://pay-whop.onrender.com/) · [Install](#installation) · [Usage guide](docs/advanced-usage.md) · [Compatibility](docs/compatibility.md) · [Changelog](CHANGELOG.md)
 
-```ruby
-user.set_payment_processor(:whop)
+[![The deployed Rails playground with Whop subscription, one-time and marketplace checkout controls and its Ruby integration example](.github/images/demo-overview.jpg)](https://pay-whop.onrender.com/)
 
-checkout = user.payment_processor.checkout(
-  variant_id: "plan_...",
-  redirect_url: billing_url,
-  idempotency_key: checkout_attempt.id.to_s
-)
-redirect_to checkout.purchase_url, allow_other_host: true
+**Community alpha.** Published on RubyGems as `0.1.0.alpha.4`. Independently maintained; not an official Whop or Pay integration. Start in the sandbox and review the [verification evidence](docs/verification.md) before production use.
 
-# After Whop's verified webhook has been processed:
-user.payment_processor.subscribed?
-user.payment_processor.subscription.cancel
-user.payment_processor.charges.last.refund!
-```
+## What you can build
 
-## Status and scope
-
-| Capability | Status |
+| Flow | Adapter support |
 | --- | --- |
-| Hosted checkout for an existing Whop variant | Implemented |
-| Link a Rails customer using signed checkout metadata | Implemented; never matched by email |
-| Recurring membership and successful payment synchronization | Implemented |
-| Cancel at period end, cancel immediately, reverse a pending cancellation | Implemented |
-| Full and partial refunds | Implemented; exact partial refund verified in sandbox |
-| Verified webhooks, duplicate record prevention, stale snapshot protection | Implemented |
-| Trial and past-due state synchronization | Implemented; provider behavior still needs sandbox coverage |
-| Pause/resume billing, one-time entitlements, free days and promo codes | Implemented; see provider-state caveats in the advanced guide |
-| Saved methods, direct charging, authorization/capture/void | Implemented; saved-method charging verified in sandbox |
-| Draft/issued invoices, invoice settlement and dispute workflows | Implemented; invoice issuance requires account verification |
-| Subaccounts, onboarding/payout links, application fees, transfers | Implemented; settlement depends on provider capabilities and available balance |
-| Existing-payment retry and 3DS recovery URL | Implemented; HTTP and demo error-path coverage |
-| Reduce renewal price, change billing period or next renewal date | Implemented within Whop restrictions; HTTP coverage |
-| Merchant capabilities, balances, payout status and reconciliation | Implemented; sandbox reads verified, bank payouts unavailable in sandbox |
-| Application webhook callbacks and pending-delivery recovery job | Implemented |
-| Plan swaps, proration, recurring seat changes, metered usage | Not supported |
-| Seller isolation under one platform | Implemented; never mix sandbox and production in one database |
-| One-time purchases | Implemented as Pay charges, not recurring subscriptions |
+| Sell once or bill repeatedly | Hosted checkout for existing or inline Whop variants; one-time charges and recurring subscriptions |
+| Manage billing | Cancel, resume, pause, free days, promo codes and permitted renewal price/date/cadence changes |
+| Charge saved methods | Setup checkout, direct charges, authorization/capture/void, failed-payment retry and 3DS recovery |
+| Refund payments | Full and partial refunds using exact currency precision and confirmed provider state |
+| Run a marketplace | Seller subaccounts, hosted onboarding/payout links, separate seller-scoped buyers and application fees |
+| Keep Rails in sync | Signed webhooks, replay protection, application callbacks, recovery jobs and reconciliation |
+| Extend billing workflows | Invoice and dispute summaries, one-time entitlements, balances, transfer and payout status |
 
-See the [compatibility matrix](docs/compatibility.md) and [advanced usage](docs/advanced-usage.md) for one-time purchases, saved cards, invoices, marketplace fees and payouts, and dispute workflows.
+See the [full compatibility matrix](docs/compatibility.md) for Pay method coverage and provider restrictions. Plan swaps, Stripe-style proration, recurring seat changes and metered billing are unsupported. Invoice issuance and internal transfers are implemented but remain blocked by verification in this sandbox; bank payouts are unavailable in Whop's sandbox. [Details and sources →](docs/advanced-usage.md)
 
-Unsupported adapter operations raise `Pay::NotSupportedError`. The SDK remains available through `Pay::Whop.client`, but SDK calls alone do not synchronize Pay records.
+## Tested, with evidence
 
-Requires Ruby 3.3+, Pay 12.3–12.x, and `whop_sdk` 2.7.x. The bundled demo uses Rails 8.1. API requests and webhook registration use the dated API version `2026-10-28-1`. The current [RubyGems alpha is `0.1.0.alpha.4`](https://rubygems.org/gems/pay-whop/versions/0.1.0.alpha.4).
+- **12 CI combinations:** Ruby 3.3 / 3.4 / 4.0 × Pay 12.3 / 12.4 × SQLite / PostgreSQL, using Rails 8.1.
+- **100 tests, 369 assertions** in the `0.1.0.alpha.4` release suite, plus Standard Ruby linting. Tests exercise real Pay models, signed webhook requests and the SDK/HTTP boundary without payment credentials.
+- **Fresh-app installation:** the published gem was downloaded, its SHA-256 checked against the release artifact, and installed/migrated/eager-loaded in a separate Rails application.
+- **Actual sandbox runs:** recurring and one-time checkout, marketplace fees, cancellation, full/partial refunds, saved methods, authorization/capture/void and signed child webhooks. [Observed results and remaining gaps →](docs/verification.md)
 
-## Install in a Rails application
+HTTP fixtures, sandbox observations and live-money validation are different levels of evidence. The [verification log](docs/verification.md) states which applies to each flow; production processing and complete renewal/SCA/bank-settlement lifecycles remain unverified.
 
-Install the published alpha from RubyGems:
+<details>
+<summary>See real sandbox billing and refund records</summary>
+
+![The Rails demo displaying a canceled subscription, marketplace payment, partial refund and full refund from actual Whop sandbox operations](.github/images/demo-billing.jpg)
+
+Captured from the deployed demo on 12 November 2026. Synthetic customer records and test money; checkout totals can include tax.
+
+</details>
+
+<details>
+<summary>Explore the separately labelled invoice and transfer simulations</summary>
+
+![Amber-labelled invoice and transfer simulations showing their local activity history and simulated outcomes](.github/images/demo-simulations.jpg)
+
+[Try these simulations](https://pay-whop.onrender.com/#simulations) without a Whop account or KYC. They update separate local demo records, with `sim_` references and a resettable history. They never call Whop, create Pay charges, grant access or move funds. A simulated outcome does not verify real invoice issuance or transfer settlement.
+
+</details>
+
+## Installation
+
+Requires Ruby 3.3+, Pay 12.3–12.x and Whop Ruby SDK 2.7.x. The demo and installation smoke test use Rails 8.1. Requests are pinned to Whop API date `2026-10-28-1`.
 
 ```ruby
 # Gemfile
 gem "pay-whop", "0.1.0.alpha.4"
 ```
 
-Install both engines' migrations, including Pay's STI and object-column migrations:
+Install both engines' missing migrations, including Pay's STI and object columns:
 
 ```sh
 bundle install
@@ -71,9 +74,10 @@ bin/rails pay_whop:install:migrations
 bin/rails db:migrate
 ```
 
-Configure the adapter in an initializer. Keep credentials outside version control:
+Configure the adapter in an initializer. Keep credentials in environment variables or your secret manager:
 
 ```ruby
+# config/initializers/pay_whop.rb
 Pay::Whop.configure do |config|
   config.environment = ENV.fetch("WHOP_ENVIRONMENT", "sandbox")
   config.api_key = ENV.fetch("WHOP_API_KEY")
@@ -82,7 +86,7 @@ Pay::Whop.configure do |config|
 end
 ```
 
-Configure your billable model as usual:
+Add Pay to your billable model:
 
 ```ruby
 class User < ApplicationRecord
@@ -90,89 +94,68 @@ class User < ApplicationRecord
 end
 ```
 
-The gem mounts `POST /pay/whop/webhooks`. For marketplaces, enable subaccount events on the platform webhook. Register a webhook on the same Whop account and API version, using the event names in `Pay::Whop::Delivery::EVENTS`. Supply its signing secret verbatim, including the `ws_` prefix.
+Register `POST /pay/whop/webhooks` in Whop with the event list in `Pay::Whop::Delivery::EVENTS`, the same API date, and the signing secret verbatim (including its `ws_` prefix). Enable subaccount events for marketplaces. Run a durable Active Job worker; the demo uses PostgreSQL-backed GoodJob in production.
 
-Use an Account API key with permissions for checkout configuration creation, member reads, membership reads/updates/cancellation, and payment reads/refunds. Product/variant and webhook-management permissions are needed only if your application provisions those resources. Whop's sandbox Admin role can create checkouts; its `accounts.me` endpoint additionally requires balance-read access, so the connection checker deliberately uses the checkout API.
+Use an Account API key with the permissions for the features you enable. Checkout needs checkout-configuration creation and related product/variant access; synchronization needs member, membership and payment reads. [Feature-specific permissions →](docs/advanced-usage.md#permissions-and-operations)
 
-Run an Active Job worker. Production needs a durable queue adapter. The example uses PostgreSQL-backed GoodJob in production and the in-memory `:async` adapter for local development.
+## Your first checkout
+
+Use an existing Whop recurring variant and an HTTPS return URL:
+
+```ruby
+customer = current_user.set_payment_processor(:whop)
+
+checkout = customer.checkout(
+  variant_id: "plan_...",
+  redirect_url: billing_url,
+  idempotency_key: checkout_attempt.id.to_s
+)
+redirect_to checkout.purchase_url, allow_other_host: true
+```
+
+After the verified webhook has synchronized the provider state:
+
+```ruby
+current_user.payment_processor.subscribed?
+current_user.payment_processor.subscription.cancel
+current_user.payment_processor.charges.last.refund!(
+  idempotency_key: refund_request.id.to_s
+)
+```
+
+For a one-time purchase, use `customer.checkout_charge(amount: 500, redirect_url: billing_url, idempotency_key: order.id.to_s)`. Amounts accepted by convenience methods are integer minor units: `500` means USD 5.00. A successful one-time payment creates a charge, not a recurring subscription.
+
+For marketplaces, create and verify a seller subaccount, then use `merchant.customer_for(user)` for that seller's checkout. Keep one platform account and one environment per Rails database. [Marketplace example →](docs/advanced-usage.md#marketplace--connect-style-flows)
 
 ## How synchronization works
 
-1. Checkout metadata contains a signed Pay customer ID, scoped to the seller account and environment. Treat the customer-specific checkout URL as private: Whop checkout configurations are reusable links, not single-use sessions.
-2. The webhook endpoint verifies Whop's signature and timestamp, checks the seller account, then persists the event ID, type and resource ID. It does not persist the raw webhook body.
-3. A job retrieves the current payment or membership from Whop. It verifies the account again and resolves the signed customer reference or an already-linked Whop member.
-4. Pay records are updated under a customer row lock. Provider `updated_at` values prevent older snapshots from overwriting newer ones. API calls run outside database transactions.
-5. Payment records become Pay charges only when their provider status is `paid`. A checkout redirect, pending payment or authorized card is not a paid charge.
+1. Checkout metadata carries a signed Pay customer reference, scoped to the Whop account and environment. Customers are never matched by email.
+2. The endpoint verifies the webhook signature and timestamp, checks the account, and persists the event/type/resource IDs without storing the raw webhook body.
+3. A job retrieves the current Whop resource, checks its ownership, and updates local records under a row lock. Timestamped snapshots cannot overwrite newer state; terminal payout reversals cannot regress.
+4. Only a provider payment with status `paid` creates a Pay charge. Returning from checkout or receiving HTTP 200 does not grant access.
 
-A Whop member can belong to only one Pay customer in this application. Conflicting links fail explicitly. Marketplace buyers use separate seller-scoped customer records created by `merchant.customer_for(user)`; changing the configured platform or environment requires a separate database.
+API requests run outside database transactions. Supply a stable `idempotency_key:` for each write and reuse it when retrying the same operation. Pay stores exact integer minor units; provider status determines confirmed refunds and settlement. Whop messaging remains in effect; this adapter does not generate Pay receipt/subscription emails.
 
-Duplicate webhook jobs may run, but synchronization does not create duplicate charges or subscriptions. This is not an exactly-once notification system. This version does not send Pay receipts or subscription emails; Whop's own messaging settings remain in effect.
-
-Deliveries remain pending if processing fails. Network, rate-limit and server errors receive bounded Active Job retries; other API failures emit `delivery_failed.pay_whop` without retrying that job automatically. After fixing a persistent error, enqueue retained deliveries again:
+Callbacks are at least once. Failed deliveries remain available for recovery, and applications can schedule:
 
 ```ruby
 Pay::Whop::RecoverDeliveriesJob.perform_later
 ```
 
-Schedule that recovery job periodically (it defaults to deliveries older than two minutes, with no one-day cutoff): a process can stop after the database write but before job enqueue. Monitor failed jobs rather than treating an HTTP 200 webhook acknowledgment as completed synchronization. Completed delivery IDs are retained for deduplication; choose a retention policy before running at scale.
+Monitor pending deliveries and `delivery_failed.pay_whop`. A successful webhook acknowledgment means the event was retained, not that synchronization has completed. Customer-specific checkout links are reusable and should be treated as private. [Errors, callbacks and reconciliation →](docs/advanced-usage.md#errors-callbacks-and-recovery)
 
-## Billing differences
+## Try it, extend it, report an issue
 
-- Whop variants map to Pay's `processor_plan`, memberships to subscriptions, members to customers, and payments to charges.
-- A scheduled cancellation retains access through the current billing period. `resume` reverses that scheduled cancellation; it does not reactivate an ended subscription.
-- `refund!` asks Whop to refund the remaining balance, or the specified integer minor-unit amount, then retrieves current payment and membership state. Refunds settle asynchronously and do not themselves cancel a subscription; cancel separately when access should end. Insufficient seller funds raise `Pay::Whop::ApiError` and leave the local refund amount unchanged.
-- Pay stores integer minor units. Whop money objects are converted with `BigDecimal` and the provider's currency precision, without rounding fractions away.
-- Amounts currently use Whop's account-facing `total` and `refunded_amount`, not buyer fees. Currency mismatches are rejected; adaptive-pricing/FX refunds and tax reconciliation require further validation before enabling them.
-- Supply a stable `idempotency_key:` for each checkout, charge, cancellation, resumption, invoice, transfer or refund attempt. Reuse it when retrying the same operation after a timeout. A new operation needs a new key. SDK automatic retries are disabled so unexamined writes are not automatically repeated.
+| Resource | What you will find |
+| --- | --- |
+| [Live sandbox playground](https://pay-whop.onrender.com/) | Test checkout, saved methods, refunds and session-scoped billing. Free hosting may take about a minute to wake up. |
+| [Run or deploy the demo](docs/demo.md) | Local setup, HTTPS returns, webhook configuration and Render/Neon hosting |
+| [Advanced usage](docs/advanced-usage.md) | Billing, marketplaces, invoices, disputes, retries, permissions and recovery |
+| [Compatibility matrix](docs/compatibility.md) | Supported Pay operations and differences from Stripe |
+| [Verification evidence](docs/verification.md) | Tested versions, actual sandbox results and open validation gaps |
+| [Contributing](CONTRIBUTING.md) | Development setup, test commands and useful bug reports |
+| [Report a bug](https://github.com/yshmarov/pay-whop/issues/new/choose) | Reproduction and environment details, without credentials or buyer data |
+| [Security reporting](SECURITY.md) | Private vulnerability reports |
+| [Releases](https://github.com/yshmarov/pay-whop/releases) | Changelog and downloadable gem artifacts |
 
-## Run the example
-
-```sh
-bundle install
-cp .env.example .env
-# Fill in sandbox credentials, an existing recurring WHOP_VARIANT_ID,
-# never commit .env.
-bundle exec bin/sandbox-check
-bundle exec examples/rails/bin/setup
-cd examples/rails
-bundle exec bin/rails server -b 127.0.0.1 -p 3001
-```
-
-Open `http://localhost:3001` and start a sandbox session. Each browser gets its own synthetic customer in an encrypted session cookie; all billing actions are scoped to that customer. Reuse the same browser session with your Whop sandbox account. The public playground requires PostgreSQL and a secret key; its development secret key cannot be used in production. This example is not a production SaaS starter.
-
-Whop requires an HTTPS checkout return URL. Set `WHOP_RETURN_URL` to an HTTPS page you control; for local testing it can be a static page that links back to localhost. Expose only the webhook route through your local tunnel, register that HTTPS URL in Whop, and set `WHOP_WEBHOOK_SECRET` before restarting the server. Checkout returns to the billing page; refresh after the webhook arrives. A successful subscription, cancellation and refund should be visible in both Pay and Whop.
-
-Recover pending local deliveries with:
-
-```sh
-bundle exec examples/rails/bin/reconcile
-```
-
-## Deploy the playground
-
-`render.yaml` defines a free Rails web service. Supply a separate persistent PostgreSQL database (for example, Neon Free); Render’s free database expires after 30 days. The app uses GoodJob with PostgreSQL-backed jobs, bounded retries and a recovery job for pending deliveries. It only boots against Whop sandbox. Free hosting has usage limits and the web service sleeps when idle.
-
-Set the listed environment variables in the host’s secret settings. Optionally set `DEMO_MERCHANT_ID` to a registered sandbox subaccount to show marketplace checkout, and `WHOP_ONE_TIME_VARIANT_ID` to a USD 5.00 one-time variant to show draft invoices. Set `WHOP_RETURN_URL` to the public HTTPS root URL, register `/pay/whop/webhooks` with Whop using the adapter’s event list and dated API version, then set `WHOP_WEBHOOK_SECRET`. `examples/rails/bin/start` applies migrations and starts Puma. Keep a stable `SECRET_KEY_BASE`: changing it invalidates sessions and the customer references already stored in Whop.
-
-Never expose the local developer database or reuse a production Whop API key for this demo. The public app has no admin interface and never accepts visitor API keys.
-
-## Develop
-
-```sh
-bin/test
-# Or:
-bundle exec rake test
-bundle exec standardrb
-```
-
-The tests use a real Rails application and Pay models, WebMock at the HTTP boundary, and genuinely signed webhook requests. They require no credentials and block external network calls. CI covers Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL. `TEST_DATABASE_URL=postgresql://localhost/pay_whop_test bundle exec rake test` uses a temporary schema in a dedicated database ending in `_test`. Run `bundle exec ruby bin/install-smoke` to build the gem, extract it and install/migrate/boot a fresh Rails application. See [release instructions](docs/releasing.md). See [verification notes](docs/verification.md) for tested versions and sandbox evidence.
-
-## References
-
-- [Pay processor guide](https://github.com/pay-rails/pay/blob/main/docs/contributing/adding_a_payment_processor.md)
-- [Whop sandbox quickstart](https://docs.whop.com/developer/quickstart)
-- [Whop Ruby SDK](https://github.com/whopio/whopsdk-ruby)
-- [Whop webhook verification](https://docs.whop.com/developer/guides/webhooks)
-- [Whop API stability](https://docs.whop.com/api-reference/stability)
-
-MIT license. Contributions welcome.
+Maintained by [Yaroslav Shmarov](https://github.com/yshmarov). Built on [Pay](https://github.com/pay-rails/pay) and [Whop's official Ruby SDK](https://github.com/whopio/whopsdk-ruby). Available under the [MIT license](LICENSE).

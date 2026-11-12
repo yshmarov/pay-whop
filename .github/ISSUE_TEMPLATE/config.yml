@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/yshmarov/pay-whop/security/advisories/new
+    about: Report exploitable vulnerabilities privately.
+  - name: Usage and compatibility
+    url: https://github.com/yshmarov/pay-whop/blob/main/docs/advanced-usage.md
+    about: Check billing examples, permissions, recovery and known limits.
