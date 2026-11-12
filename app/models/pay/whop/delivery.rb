@@ -3,7 +3,7 @@ module Pay
     class Delivery < Pay::ApplicationRecord
       self.table_name = "pay_whop_deliveries"
 
-      EVENTS = %w[payment.succeeded payment.failed payment.pending payment.canceled membership.activated membership.deactivated membership.updated refund.created refund.updated payment.authorized payment.requires_action setup_intent.succeeded setup_intent.canceled setup_intent.requires_action invoice.created invoice.paid invoice.past_due invoice.voided invoice.marked_uncollectible dispute.created dispute.updated transfer.created transfer.completed transfer.failed membership.cancel_at_period_end_changed account.updated].freeze
+      EVENTS = %w[payment.succeeded payment.failed payment.pending payment.canceled membership.activated membership.deactivated membership.updated refund.created refund.updated payment.authorized payment.requires_action setup_intent.succeeded setup_intent.canceled setup_intent.requires_action invoice.created invoice.paid invoice.past_due invoice.voided invoice.marked_uncollectible dispute.created dispute.updated transfer.created transfer.completed transfer.failed membership.cancel_at_period_end_changed account.updated payout.created payout.updated payout.reversed membership.trial_ending_soon].freeze
 
       scope :pending, -> { where(processed_at: nil) }
 
@@ -24,11 +24,14 @@ module Pay
           Invoice.sync(resource_id, account_id: account_id)
         when /\Adispute\./
           Dispute.sync(resource_id, account_id: account_id)
+        when /\Apayout\./
+          Payout.sync(resource_id, account_id: account_id)
         when /\Atransfer\./
           Transfer.sync(resource_id, account_id: account_id)
         else
           Charge.sync(resource_id, account_id: account_id)
         end
+        Pay::Webhooks.instrument(type: "whop.#{event_type}", event: {delivery: self})
         update!(processed_at: Time.current)
       end
     end

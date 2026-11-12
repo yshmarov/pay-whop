@@ -45,7 +45,11 @@ begin
   customer.charge(500, idempotency_key: order.id.to_s)
 rescue Pay::Whop::PaymentIncomplete => error
   payment_id = error.payment.id
-  # Present a pending state. Use Whop's status/elements flow for required actions.
+  if error.recovery_url
+    redirect_to error.recovery_url, allow_other_host: true
+  else
+    # Present a pending state and await the verified webhook.
+  end
 end
 ```
 
@@ -77,6 +81,18 @@ A refund is separate from cancellation and can settle asynchronously. The adapte
 `paused?` describes billing collection. Access continues until the current paid period ends; both `active?` and Pay's active subscription query preserve that distinction. Whop exposes a pause through `most_recent_action == "paused_at"`, not a `paused` membership status. The adapter refreshes provider state after every mutation; it never reports a pause solely because the request returned HTTP 200.
 
 Ended recurring subscriptions require a new checkout: Whop rejected recurring reactivation in sandbox. One-time product memberships are stored separately as `customer.entitlements`; their `active?` checks status and expiry, and `entitlement.reactivate(days: 30)` uses the one-time reactivation API.
+
+```ruby
+subscription.retry_failed_payment(idempotency_key: "retry-payment-42")
+subscription.retry_failed_payment(payment_id: "pay_...", idempotency_key: "retry-payment-42")
+subscription.reduce_renewal_price(855, idempotency_key: "discount-membership-42")
+subscription.change_billing_period(90, idempotency_key: "cadence-membership-42")
+subscription.change_next_renewal(60.days.from_now, idempotency_key: "renew-membership-42")
+```
+
+Retry resolves an existing payment belonging to this membership. Already-paid payments only synchronize; no new payment is created. A still-incomplete retry raises `PaymentIncomplete`. The returned `recovery_url` is limited to HTTPS on the configured Whop environment's host; only a confirmed provider payment creates a charge.
+
+Renewal prices can only decrease, using the existing currency precision. Whop emails the buyer about a price reduction. Billing periods accept 1–365 days; next-renewal dates must be after today in UTC. Each change sends one field and then refreshes actual membership state. Whop additionally enforces eligibility (for example, active/trialing, recurring, unpaused, auto-billed memberships for price reductions, and restrictions on invoice billing, cancellation and daily cadence). These changes are not arbitrary plan swaps or Stripe-style proration. Provider rejection leaves local state unchanged. New renewal controls have HTTP-contract tests, not completed provider billing-cycle validation.
 
 Plan swaps, proration, recurring seat changes and usage metering are not implemented. Whop's `swaps` resource converts currencies; it is not a subscription-plan swap API.
 
@@ -130,7 +146,17 @@ transfer.status # processing, succeeded or failed; creation is not settlement
 
 Register the platform webhook with **subaccount events enabled** and all events in `Pay::Whop::Delivery::EVENTS`. The platform signing secret verifies those child deliveries. Successful transfers are recorded separately from Pay charges. Whop requires sufficient available funds and may require identity verification for transfers or payouts; the adapter does not bypass those requirements or mark rejected transfers successful.
 
-`account.updated` stores the subaccount's status/capability summary. `onboarding_complete?` is not inferred from a successful redirect or account creation: read `merchant.account` and Whop's required actions/capabilities before allowing a workflow that needs them.
+`account.updated` stores the subaccount's status/capability summary. `merchant.readiness` retrieves status, capabilities and required actions. `merchant.capability_active?(:transfer)` checks one capability. `merchant.onboarding_complete?` requires an active account with card payments enabled; pass `capabilities: %w[transfer]` or another explicit list for a different workflow. This does not imply every payout method is enabled. Unknown or missing capabilities are unavailable. Account creation and redirects alone do not satisfy these checks.
+
+```ruby
+merchant.readiness
+merchant.balance # currency + BigDecimal balance/pending_balance/reserve_balance, in major units
+merchant.login_link(refresh_url: onboarding_url, return_url: sellers_url) # hosted payouts portal
+merchant.reconcile! # {transfers: ..., payouts: ...}
+merchant.payouts.each { |payout| payout.sync! }
+```
+
+Payout status is synchronized through the authenticated account-filtered list, including pagination. Whop's public payout tracking endpoint is not used to establish ownership. Platform payout events also synchronize without inventing a seller: use `Pay::Whop::Payout.where(account_id: Pay::Whop.account_id, environment: Pay::Whop.environment)` from an authorized platform-administration context. Payout records retain decimal-string amount/fee summaries in `data`, without bank details; these are major units, unlike Pay charge amounts. A completed payout may later reverse. This adapter delegates bank withdrawal initiation to Whop's hosted portal; it does not implement payout quotes or direct bank withdrawal creation. [Whop documents that payouts are unavailable in sandbox](https://docs.whop.com/developer/guides/sandbox). Sandbox tests therefore do not prove bank settlement.
 
 ## Disputes
 
@@ -153,3 +179,25 @@ Use custom scopes for the features you enable: checkout read/create; product/pla
 Hosted onboarding/payout links delegate a bundle of financial scopes. Whop required payout destination create/read/update/delete, withdrawal read/export/withdraw, transfer read/export/create, and balance read/export in the tested sandbox. Missing scopes produce an explicit API error. Webhook-management access is needed only by provisioning tools. Use separate provisioning/runtime credentials in a production deployment if your workflow allows it.
 
 Use a durable Active Job adapter, retain receipt IDs for replay protection, monitor pending deliveries and choose a retention policy. The demo uses PostgreSQL-backed GoodJob. Applications should scope invoice/dispute/transfer lookups through the authenticated customer or merchant; the adapter does not provide authentication for your own controllers.
+
+## Errors, callbacks and recovery
+
+Adapter API calls raise `Pay::Whop::ApiError < Pay::Error`, exposing `status`, provider `code`, `retryable?` and the original `provider_error`/cause. Network timeouts have no HTTP status. A timeout may follow a successful provider write: reuse the operation's idempotency key and reconcile before creating a replacement. `Pay::Whop.client` deliberately remains the raw official SDK and raises its native errors.
+
+```ruby
+Pay::Webhooks.configure do |events|
+  events.subscribe "whop.payment.succeeded" do |event|
+    delivery = event.fetch(:delivery)
+    # Billing state is already synchronized. Fulfill idempotently using delivery.event_id.
+  end
+end
+
+Pay::Whop::RecoverDeliveriesJob.perform_later
+customer.reconcile! # {memberships: ..., payments: ..., invoices: ..., skipped: ...}
+```
+
+Callbacks run after resource synchronization and before marking a delivery processed. Handler failure keeps the delivery pending; callbacks may repeat. They receive a delivery record containing IDs, not a captured provider payload. Retrieve application-owned records through the appropriate customer/merchant scope.
+
+Customer reconciliation requires an already-linked member. It paginates that account/member's memberships, payments and invoices, and verifies resource identity before import. Unverifiable signed references (for example, another app's checkout on the same account) are skipped, counted and reported through `reconciliation_skipped.pay_whop`; they are never matched by email or silently reassigned. Preserve the Rails signing secret and investigate skips for known records after key rotation. This is not a global import of unrelated Whop customers. Reconciliation and missed-delivery recovery are separate operations; schedule both as appropriate for your application.
+
+Monitor `delivery_failed.pay_whop` (delivery ID, HTTP status and provider code) and retained pending deliveries. The recovery job can re-enqueue failures after the underlying problem is fixed; periodic recovery will also encounter persistent errors, so alert on them rather than hiding them.

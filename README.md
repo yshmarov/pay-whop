@@ -39,11 +39,15 @@ user.payment_processor.charges.last.refund!
 | Saved methods, direct charging, authorization/capture/void | Implemented; saved-method charging verified in sandbox |
 | Draft/issued invoices, invoice settlement and dispute workflows | Implemented; invoice issuance requires account verification |
 | Subaccounts, onboarding/payout links, application fees, transfers | Implemented; settlement depends on provider capabilities and available balance |
+| Existing-payment retry and 3DS recovery URL | Implemented; HTTP and demo error-path coverage |
+| Reduce renewal price, change billing period or next renewal date | Implemented within Whop restrictions; HTTP coverage |
+| Merchant capabilities, balances, payout status and reconciliation | Implemented; sandbox reads verified, bank payouts unavailable in sandbox |
+| Application webhook callbacks and pending-delivery recovery job | Implemented |
 | Plan swaps, proration, recurring seat changes, metered usage | Not supported |
 | Seller isolation under one platform | Implemented; never mix sandbox and production in one database |
 | One-time purchases | Implemented as Pay charges, not recurring subscriptions |
 
-See [advanced usage](docs/advanced-usage.md) for one-time purchases, saved cards, invoices, marketplace fees and payouts, and dispute workflows.
+See the [compatibility matrix](docs/compatibility.md) and [advanced usage](docs/advanced-usage.md) for one-time purchases, saved cards, invoices, marketplace fees and payouts, and dispute workflows.
 
 Unsupported adapter operations raise `Pay::NotSupportedError`. The SDK remains available through `Pay::Whop.client`, but SDK calls alone do not synchronize Pay records.
 
@@ -104,21 +108,19 @@ A Whop member can belong to only one Pay customer in this application. Conflicti
 
 Duplicate webhook jobs may run, but synchronization does not create duplicate charges or subscriptions. This is not an exactly-once notification system. This version does not send Pay receipts or subscription emails; Whop's own messaging settings remain in effect.
 
-Deliveries remain pending if processing fails. API errors receive bounded Active Job retries. After fixing a persistent error, enqueue the retained deliveries again:
+Deliveries remain pending if processing fails. Network, rate-limit and server errors receive bounded Active Job retries; other API failures emit `delivery_failed.pay_whop` without retrying that job automatically. After fixing a persistent error, enqueue retained deliveries again:
 
 ```ruby
-Pay::Whop::Delivery.pending.find_each do |delivery|
-  Pay::Whop::ProcessDeliveryJob.perform_later(delivery)
-end
+Pay::Whop::RecoverDeliveriesJob.perform_later
 ```
 
-Keep a periodic recovery job for pending deliveries: a process can stop after the database write but before job enqueue. Monitor failed jobs rather than treating an HTTP 200 webhook acknowledgment as completed synchronization. Completed delivery IDs are retained for deduplication; choose a retention policy before running at scale.
+Schedule that recovery job periodically (it defaults to deliveries older than two minutes, with no one-day cutoff): a process can stop after the database write but before job enqueue. Monitor failed jobs rather than treating an HTTP 200 webhook acknowledgment as completed synchronization. Completed delivery IDs are retained for deduplication; choose a retention policy before running at scale.
 
 ## Billing differences
 
 - Whop variants map to Pay's `processor_plan`, memberships to subscriptions, members to customers, and payments to charges.
 - A scheduled cancellation retains access through the current billing period. `resume` reverses that scheduled cancellation; it does not reactivate an ended subscription.
-- `refund!` asks Whop to refund the remaining balance, or the specified integer minor-unit amount, then retrieves current payment and membership state. Refunds settle asynchronously and do not themselves cancel a subscription; cancel separately when access should end. Insufficient seller funds raise an SDK error and leave the local refund amount unchanged.
+- `refund!` asks Whop to refund the remaining balance, or the specified integer minor-unit amount, then retrieves current payment and membership state. Refunds settle asynchronously and do not themselves cancel a subscription; cancel separately when access should end. Insufficient seller funds raise `Pay::Whop::ApiError` and leave the local refund amount unchanged.
 - Pay stores integer minor units. Whop money objects are converted with `BigDecimal` and the provider's currency precision, without rounding fractions away.
 - Amounts currently use Whop's account-facing `total` and `refunded_amount`, not buyer fees. Currency mismatches are rejected; adaptive-pricing/FX refunds and tax reconciliation require further validation before enabling them.
 - Supply a stable `idempotency_key:` for each checkout, charge, cancellation, resumption, invoice, transfer or refund attempt. Reuse it when retrying the same operation after a timeout. A new operation needs a new key. SDK automatic retries are disabled so unexamined writes are not automatically repeated.
@@ -148,7 +150,7 @@ bundle exec examples/rails/bin/reconcile
 
 ## Deploy the playground
 
-`render.yaml` defines a free Rails web service. Supply a separate persistent PostgreSQL database (for example, Neon Free); Render’s free database expires after 30 days. The app uses GoodJob with PostgreSQL-backed jobs, bounded retries and a recovery job for recent pending deliveries. It only boots against Whop sandbox. Free hosting has usage limits and the web service sleeps when idle.
+`render.yaml` defines a free Rails web service. Supply a separate persistent PostgreSQL database (for example, Neon Free); Render’s free database expires after 30 days. The app uses GoodJob with PostgreSQL-backed jobs, bounded retries and a recovery job for pending deliveries. It only boots against Whop sandbox. Free hosting has usage limits and the web service sleeps when idle.
 
 Set the listed environment variables in the host’s secret settings. Optionally set `DEMO_MERCHANT_ID` to a registered sandbox subaccount to show marketplace checkout, and `WHOP_ONE_TIME_VARIANT_ID` to a USD 5.00 one-time variant to show draft invoices. Set `WHOP_RETURN_URL` to the public HTTPS root URL, register `/pay/whop/webhooks` with Whop using the adapter’s event list and dated API version, then set `WHOP_WEBHOOK_SECRET`. `examples/rails/bin/start` applies migrations and starts Puma. Keep a stable `SECRET_KEY_BASE`: changing it invalidates sessions and the customer references already stored in Whop.
 
@@ -163,7 +165,7 @@ bundle exec rake test
 bundle exec standardrb
 ```
 
-The tests use a real Rails application and Pay models with SQLite, WebMock at the HTTP boundary, and genuinely signed webhook requests. They require no credentials and block external network calls. See [verification notes](docs/verification.md) for tested versions and sandbox evidence.
+The tests use a real Rails application and Pay models, WebMock at the HTTP boundary, and genuinely signed webhook requests. They require no credentials and block external network calls. CI covers Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL. `TEST_DATABASE_URL=postgresql://localhost/pay_whop_test bundle exec rake test` uses a temporary schema in a dedicated database ending in `_test`. Run `bundle exec ruby bin/install-smoke` to build the gem, extract it and install/migrate/boot a fresh Rails application. See [release instructions](docs/releasing.md). See [verification notes](docs/verification.md) for tested versions and sandbox evidence.
 
 ## References
 

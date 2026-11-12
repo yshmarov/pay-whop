@@ -176,4 +176,25 @@ class BillingDemoTest < ActionDispatch::IntegrationTest
   ensure
     ActionController::Base.allow_forgery_protection = original
   end
+  test "saved card requiring authentication offers the recovery link without recording success" do
+    begin_demo
+    customer = User.order(:id).last.payment_processor
+    customer.update!(processor_id: "mber_demo", data: {whop_account_id: "biz_test", whop_environment: "sandbox"})
+    api(:get, "payment_methods?member_id=mber_demo&first=100&after", {data: [{id: "payt_demo", __typename: "CardPaymentMethod", payment_method_type: "card", card: {brand: "visa", last4: "4242", exp_month: 12, exp_year: 2034}}], page_info: {has_next_page: false}})
+    recovery = "https://sandbox.whop.com/payments/recover/test"
+    api(:post, "payments", payment(member_id: "mber_demo", metadata: customer.checkout_metadata, status: "requires_action", recovery_url: recovery))
+    post "/charge", params: {payment_method_id: "payt_demo", authenticity_token: csrf_token}
+    follow_redirect!
+    assert_select "a[href=?]", recovery, text: "Complete test payment authentication on Whop"
+    assert_select "[role=alert]", text: /has not confirmed/
+    assert_empty customer.charges
+  end
+
+  test "a stranger cannot retry a subscription payment" do
+    subscription = @customer.subscriptions.create!(name: "default", processor_id: "mem_private", processor_plan: "plan_test", status: "past_due", quantity: 1)
+    begin_demo
+    post "/subscriptions/#{subscription.id}/retry", params: {authenticity_token: csrf_token}
+    assert_response :not_found
+    assert_not_requested :post, %r{/retry}
+  end
 end

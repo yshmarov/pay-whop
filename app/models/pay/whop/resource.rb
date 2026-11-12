@@ -16,6 +16,9 @@ module Pay
             return record if object["status"] == "processing"
             raise InvalidPayload, "Conflicting final transfer state" if object["status"] != record.status
           end
+          if self == Payout && record.persisted? && %w[completed reversed failed denied canceled].include?(record.status)
+            return record if %w[requested in_review processing].include?(object["status"])
+          end
           owner_key = owner.is_a?(Merchant) ? :merchant : :customer
           if record.persisted? && record.public_send("#{owner_key}_id") != owner.id
             raise IdentityError, "Resource owner changed"

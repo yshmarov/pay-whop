@@ -22,12 +22,12 @@ module Pay
       def detach
         customer.sync_payment_methods
         raise IdentityError, "Payment method is no longer owned by this customer" unless self.class.exists?(id)
-        Whop.client.payment_methods.delete_payment_method(id: processor_id, request_options: Whop.request_options(idempotency_key: "pay-whop-detach-#{id}"))
+        Whop.api.payment_methods.delete_payment_method(id: processor_id, request_options: Whop.request_options(idempotency_key: "pay-whop-detach-#{id}"))
         destroy!
       end
 
       def self.sync_setup(id, account_id:)
-        object = Whop.api_attributes(Whop.client.setup_intents.retrieve(id: id, request_options: Whop.request_options))
+        object = Whop.api_attributes(Whop.api.setup_intents.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected setup intent ID" unless object.fetch("id") == id
         Whop.verify_account!(object, expected: account_id)
         return unless object["status"] == "succeeded"

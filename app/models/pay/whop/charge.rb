@@ -2,7 +2,7 @@ module Pay
   module Whop
     class Charge < Pay::Charge
       def self.sync(id, account_id: nil)
-        object = Whop.api_attributes(Whop.client.payments.retrieve(id: id, request_options: Whop.request_options))
+        object = Whop.api_attributes(Whop.api.payments.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected payment ID" unless object.fetch("id") == id
         Whop.verify_account!(object, expected: account_id)
         subscription = Subscription.sync(object["membership_id"], account_id: object["account_id"]) if object["membership_id"].present?
@@ -59,7 +59,7 @@ module Pay
 
       def fees
         api_record
-        Whop.client.payments.list_fees(id: processor_id, request_options: Whop.request_options)
+        Whop.api.payments.list_fees(id: processor_id, request_options: Whop.request_options)
       end
 
       def whop? = true

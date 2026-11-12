@@ -2,16 +2,17 @@ class BillingController < ActionController::Base
   layout "application"
   before_action :load_customer
   before_action :require_customer, except: [:show, :start]
-  rate_limit to: 10, within: 1.minute, only: [:start, :checkout, :cancel, :resume, :refund, :pause, :sync_methods, :charge, :invoice, :simulate], with: -> { redirect_to root_path, alert: "Please wait a minute before trying again." }
+  rate_limit to: 10, within: 1.minute, only: [:start, :checkout, :cancel, :resume, :refund, :pause, :sync_methods, :charge, :invoice, :simulate, :retry_payment, :reconcile], with: -> { redirect_to root_path, alert: "Please wait a minute before trying again." }
 
   rescue_from Pay::Error, Whop_sdk::Errors::ApiError do |error|
     message = if error.is_a?(Pay::Whop::PaymentIncomplete)
       "Whop has not confirmed this test payment yet. Refresh after its webhook arrives; no successful charge has been recorded."
-    elsif error.message.include?("not_enough_balance")
+    elsif (error.is_a?(Pay::Whop::ApiError) && error.code == "not_enough_balance") || error.message.include?("not_enough_balance")
       "Whop cannot refund this test payment while the seller's sandbox funds are pending. Your payment has not been marked refunded."
     else
       "Whop could not complete that operation. Your confirmed billing state is shown below. Please try again later."
     end
+    flash[:recovery_url] = error.recovery_url if error.is_a?(Pay::Whop::PaymentIncomplete)
     redirect_to root_path, alert: message
   end
 
@@ -84,6 +85,19 @@ class BillingController < ActionController::Base
 
   def sync_methods
     @customer.sync_payment_methods
+    redirect_to root_path
+  end
+
+  def retry_payment
+    subscription = scoped_subscriptions.find(params[:id])
+    payment = subscription.latest_payment
+    raise Pay::Whop::Error, "No payment is available to retry" unless payment
+    subscription.retry_failed_payment(payment_id: payment.id, idempotency_key: "#{@user.checkout_key}-retry-#{payment.id}")
+    redirect_to root_path
+  end
+
+  def reconcile
+    @customer.reconcile!
     redirect_to root_path
   end
 

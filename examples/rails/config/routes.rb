@@ -6,6 +6,8 @@ Rails.application.routes.draw do
   post "subscriptions/:id/cancel", to: "billing#cancel", as: :cancel_subscription
   post "subscriptions/:id/resume", to: "billing#resume", as: :resume_subscription
   post "subscriptions/:id/pause", to: "billing#pause", as: :pause_subscription
+  post "subscriptions/:id/retry", to: "billing#retry_payment", as: :retry_subscription
+  post "reconcile", to: "billing#reconcile", as: :reconcile_billing
   post "payment_methods/sync", to: "billing#sync_methods", as: :sync_payment_methods
   post "charge", to: "billing#charge", as: :saved_charge
   post "invoice", to: "billing#invoice", as: :create_invoice

@@ -4,13 +4,29 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ruby: ["3.3", "3.4", "4.0"]
+        pay: ["12.3.0", "12.4.0"]
+        database: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pay_whop_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PAY_VERSION: ${{ matrix.pay }}
+      TEST_DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://postgres:postgres@localhost:5432/pay_whop_test' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
+      - run: bundle update pay
       - run: bundle exec rake test
       - run: bundle exec standardrb
+      - if: matrix.ruby == '4.0' && matrix.pay == '12.4.0' && matrix.database == 'sqlite'
+        run: bundle exec ruby bin/install-smoke

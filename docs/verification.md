@@ -1,14 +1,14 @@
 # Verification
 
-Provider verification date: 7 November 2026. Demo simulation verification: 12 November 2026. Release: `0.1.0.alpha.2`.
+Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: `0.1.0.alpha.3`.
 
 ## Versions and automated coverage
 
-Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
+Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and PostgreSQL, with WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
 
-The local suite passes **71 tests / 250 assertions** and Standard Ruby linting. GitHub Actions runs the same checks on Ruby 3.3, 3.4 and 4.0; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
+The local suite passes **100 tests / 367 assertions** and Standard Ruby linting. The local suite also passes with Pay 12.3.0; installation from the built gem into a fresh Rails application passes. GitHub Actions runs Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
 
-Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries.
+Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries. Expanded tests cover existing-payment retries without duplicate charges, renewal restrictions, normalized API errors including lazy pagination/timeouts, application callback failure recovery, payout ownership/pagination/reversals, merchant capabilities, decimal balances and linked-customer reconciliation.
 
 ## Actual sandbox evidence
 
@@ -33,12 +33,15 @@ The [hosted playground](https://pay-whop.onrender.com/) uses the adapter and rec
 | Hosted onboarding and payout links | Both generated valid sandbox Whop URLs after the required scopes were configured |
 | Marketplace checkout | Completed a USD 5.00 subaccount checkout; provider reported USD 6.00 including tax. The fee report confirmed a collected USD 1.00 application fee; the signed child event created a charge under the seller-scoped customer |
 | Platform transfer | Whop rejected the request because the platform business is not verified; no transfer was recorded as successful |
+| Merchant readiness / balances (12 Nov) | Fresh account capabilities and USD ledger balances retrieved; card payments active, transfer and payout capabilities inactive |
+| Merchant reconciliation (12 Nov) | Authenticated transfer/payout lists returned successfully with zero records; this does not prove settlement |
+| Linked customer reconciliation (12 Nov) | One membership and one payment recovered; seven references from a different application signing context were skipped and reported |
 | Visitor isolation | A separate hosted visitor could not see or cancel/refund another visitor's records; cross-customer actions returned 404 |
 | Queue and deployment | PostgreSQL migrations, eager loading and persisted GoodJob execution verified; earlier deployment-time webhook failures recovered on Whop retry |
 
-A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Authentication challenges, dispute submission and evidence upload, one-time entitlement reactivation, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
+A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Completed provider authentication challenges, dispute submission and evidence upload, one-time entitlement reactivation, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
 
-The hosted webhook subscribes to all 26 adapter events with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. The earlier provider-flow review covered desktop layout; a full mobile/accessibility assessment remains outstanding.
+The adapter event list now includes 30 events (payout changes and trial-ending notifications added); deployment updates the hosted webhook to match, with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. The earlier provider-flow review covered desktop layout; a full mobile/accessibility assessment remains outstanding.
 
 ## Integration findings
 
@@ -55,7 +58,7 @@ The hosted webhook subscribes to all 26 adapter events with subaccount events en
 
 ## Remaining limits
 
-This is an alpha integration, not a declaration of production readiness or full Pay/Stripe parity. Live-money processing, high-concurrency PostgreSQL races, full accessibility assessment, SCA recovery UX, FX/tax reconciliation, historical backfills, broad Pay-version upgrade compatibility and long-running renewal/retry behavior remain unverified.
+This is an alpha integration, not a declaration of production readiness or full Pay/Stripe parity. Live-money processing, high-concurrency PostgreSQL races, full accessibility assessment, completed provider SCA recovery, FX/tax reconciliation, global historical imports, compatibility beyond the tested matrix and long-running renewal/retry behavior remain unverified. Renewal price/cadence/date mutations and bank payout transitions have HTTP-contract coverage; they were not validated by running a complete real provider billing cycle. Local browser checks confirmed the recovery URL/error state and new demo controls at desktop, 320px and 390px widths; the preview used blocked-network HTTP fixtures, not a completed Whop challenge.
 
 Plan swaps/proration, recurring seat changes and metered billing are not implemented. The Whop `swaps` API is for currencies, not subscription plans. The adapter does not implement Whop's unrelated chat, ads, trading, cards or affiliate administration APIs; callers can use the official SDK for those.
 
@@ -68,3 +71,5 @@ The public playground has a separate, amber-labelled simulation section. Invoice
 These controls only write separate demo records. They make no Whop API calls, create no provider resources, enqueue no provider webhook deliveries, create no Pay charges or subscriptions and move no funds. A simulated outcome is not proof of API compatibility, business verification, actual invoice payment or settled transfer. The gem's real invoice and transfer methods keep their provider checks and errors. The simulator is available before linking a Whop buyer, and mutation requests reject a production Whop environment.
 
 Automated coverage checks lifecycle transitions, repeated starts, reset, terminal outcomes, session isolation, CSRF, the sandbox guard and absence of Pay billing records or external requests. Local browser checks exercised invoice issuance/overdue/payment and transfer failure before deployment. The simulation section was inspected at 320px and 390px viewport widths with no page overflow; this is not a full accessibility assessment.
+
+The fresh-install smoke check builds and extracts the actual gem, generates a separate Rails application, installs Pay and adapter migrations in separate commands, migrates the database, eager-loads, creates a Whop customer and verifies the webhook route and recovery job. It uses no API credentials or external payment calls.

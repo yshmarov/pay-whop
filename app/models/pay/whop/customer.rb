@@ -16,7 +16,7 @@ module Pay
         bind_account!
         raise ArgumentError, "Choose a variant or variant_id" if mode == "payment" && [variant_id, variant].compact.size != 1
         raise ArgumentError, "Unknown checkout option" unless (options.keys - %i[affiliate_code currency payment_method_configuration three_ds_level]).empty?
-        Whop.client.checkout_configurations.create(**options,
+        Whop.api.checkout_configurations.create(**options,
           account_id: account_id, variant_id: variant_id, variant: variant, mode: mode, redirect_url: redirect_url,
           metadata: checkout_metadata(metadata, name: name),
           request_options: Whop.request_options(idempotency_key: idempotency_key))
@@ -70,7 +70,7 @@ module Pay
         verify_configuration!
         raise Error, "Complete checkout or payment setup first" if processor_id.blank?
         ids = []
-        Whop.each_page(Whop.client.payment_methods, member_id: processor_id) do |object|
+        Whop.each_page(Whop.api.payment_methods, member_id: processor_id) do |object|
           ids << PaymentMethod.sync(object, customer: self).processor_id
         end
         payment_methods.where.not(processor_id: ids).destroy_all
@@ -86,7 +86,7 @@ module Pay
 
       def create_setup_intent(confirmation_token:, return_url:, currency: "usd", metadata: {}, idempotency_key: SecureRandom.uuid)
         bind_account!
-        Whop.client.setup_intents.create(account_id: account_id, confirmation_token: confirmation_token,
+        Whop.api.setup_intents.create(account_id: account_id, confirmation_token: confirmation_token,
           return_url: return_url, currency: currency, metadata: checkout_metadata(metadata),
           request_options: Whop.request_options(idempotency_key: idempotency_key))
       end
@@ -94,7 +94,7 @@ module Pay
       def create_payment_intent(confirmation_token:, return_url:, variant_id: nil, variant: nil, metadata: {}, capture: true, idempotency_key: SecureRandom.uuid)
         bind_account!
         raise ArgumentError, "Choose a variant or variant_id" unless [variant_id, variant].compact.size == 1
-        Whop.client.payments.create(account_id: account_id, confirmation_token: confirmation_token,
+        Whop.api.payments.create(account_id: account_id, confirmation_token: confirmation_token,
           return_url: return_url, variant_id: variant_id, variant: variant, capture: capture,
           metadata: checkout_metadata(metadata), request_options: Whop.request_options(idempotency_key: idempotency_key))
       end
@@ -109,7 +109,7 @@ module Pay
         raise ArgumentError, "Choose a variant or variant_id" unless [variant_id, variant].compact.size == 1
         method = payment_method_id ? add_payment_method(payment_method_id) : default_payment_method
         raise Error, "Save a payment method and select a default first" unless method
-        Whop.client.payments.create(account_id: account_id, member_id: processor_id,
+        Whop.api.payments.create(account_id: account_id, member_id: processor_id,
           payment_method_id: method.processor_id, variant_id: variant_id, variant: variant,
           off_session: off_session, return_url: return_url, capture: capture,
           metadata: checkout_metadata(metadata, name: name), request_options: Whop.request_options(idempotency_key: idempotency_key))
@@ -130,7 +130,7 @@ module Pay
       end
 
       def payment(id)
-        result = Whop.client.payments.retrieve(id: id, request_options: Whop.request_options)
+        result = Whop.api.payments.retrieve(id: id, request_options: Whop.request_options)
         object = Whop.api_attributes(result)
         raise InvalidPayload, "Unexpected payment ID" unless object.fetch("id") == id
         verify_resource!(object)
@@ -139,18 +139,18 @@ module Pay
 
       def capture(payment_id, idempotency_key: SecureRandom.uuid)
         payment(payment_id)
-        Whop.client.payments.capture(id: payment_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.payments.capture(id: payment_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
         confirmed_charge(payment(payment_id))
       end
 
       def void(payment_id, idempotency_key: SecureRandom.uuid)
         payment(payment_id)
-        Whop.client.payments.void(id: payment_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.payments.void(id: payment_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
       end
 
       def retry_payment(payment_id, idempotency_key: SecureRandom.uuid)
         payment(payment_id)
-        Whop.client.payments.retry_(id: payment_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.payments.retry_(id: payment_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
         confirmed_charge(payment(payment_id))
       end
 
@@ -165,7 +165,7 @@ module Pay
         raise Error, "Complete checkout or payment setup first" if processor_id.blank?
         raise ArgumentError, "Unknown invoice option" unless (options.keys - %i[due_at memo payment_method_id]).empty?
         add_payment_method(options[:payment_method_id]) if options[:payment_method_id]
-        result = Whop.client.invoices.create(**options, account_id: account_id, member_id: processor_id, items: items,
+        result = Whop.api.invoices.create(**options, account_id: account_id, member_id: processor_id, items: items,
           metadata: checkout_metadata(metadata), request_options: Whop.request_options(idempotency_key: idempotency_key))
         Invoice.sync(result.id, account_id: account_id)
       end
@@ -177,17 +177,43 @@ module Pay
       def sync_subscriptions
         verify_configuration!
         raise Error, "Customer has not completed checkout" if processor_id.blank?
-        Whop.each_page(Whop.client.memberships, account_id: account_id, member_id: processor_id) do |object|
+        Whop.each_page(Whop.api.memberships, account_id: account_id, member_id: processor_id) do |object|
           verify_resource!(object)
           Subscription.sync(object.fetch("id"), account_id: account_id)
         end
         subscriptions.reload
       end
 
+      def reconcile!
+        verify_configuration!
+        raise Error, "Customer has not completed checkout" if processor_id.blank?
+        counts = {memberships: 0, payments: 0, invoices: 0, skipped: 0}
+        {memberships: Whop.api.memberships, payments: Whop.api.payments, invoices: Whop.api.invoices}.each do |kind, endpoint|
+          Whop.each_page(endpoint, account_id: account_id, member_id: processor_id) do |object|
+            Whop.verify_account!(object, expected: account_id)
+            raise IdentityError, "Reconciliation returned another member" unless object["member_id"] == processor_id
+            token = object.dig("metadata", "pay_customer")
+            if token.present? && self.class.find_signed(token, purpose: Whop.identity_purpose(account_id)).nil?
+              counts[:skipped] += 1
+              ActiveSupport::Notifications.instrument("reconciliation_skipped.pay_whop", customer_id: id, resource_id: object.fetch("id"), resource_type: kind)
+              next
+            end
+            verify_resource!(object)
+            case kind
+            when :memberships then Subscription.sync(object.fetch("id"), account_id: account_id)
+            when :payments then Charge.sync(object.fetch("id"), account_id: account_id)
+            when :invoices then Invoice.sync(object.fetch("id"), account_id: account_id)
+            end
+            counts[kind] += 1
+          end
+        end
+        counts
+      end
+
       def api_record
         verify_configuration!
         raise Error, "Customer has not completed a Whop checkout" if processor_id.blank?
-        Whop.client.members.retrieve(id: processor_id, request_options: Whop.request_options)
+        Whop.api.members.retrieve(id: processor_id, request_options: Whop.request_options)
       end
 
       def update_api_record(**attributes)

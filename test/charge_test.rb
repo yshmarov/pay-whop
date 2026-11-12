@@ -53,7 +53,7 @@ class ChargeTest < ActiveSupport::TestCase
     request = api(:post, "payments/pay_test/refund",
       {error: {type: "bad_request", message: "Insufficient funds", code: "not_enough_balance"}}, status: 400)
 
-    assert_raises(Whop_sdk::Errors::ClientError) { charge.refund! }
+    assert_raises(Pay::Whop::ApiError) { charge.refund! }
     assert_equal 0, charge.reload.amount_refunded
     assert_requested request, times: 1
   end

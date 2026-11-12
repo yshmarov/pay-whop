@@ -1,5 +1,6 @@
 source "https://rubygems.org"
 gemspec
+gem "pay", ENV["PAY_VERSION"] if ENV["PAY_VERSION"]
 
 gem "rails", "~> 8.1.0"
 gem "sqlite3", "~> 2.0"

@@ -5,6 +5,13 @@ require "webmock/minitest"
 require "minitest/mock"
 
 WebMock.disable_net_connect!(allow_localhost: true)
+if ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
+  raise "Use a dedicated database ending in _test" unless ActiveRecord::Base.connection_db_config.database.end_with?("_test")
+  schema = "pay_whop_test_#{Process.pid}"
+  ActiveRecord::Base.connection.execute("CREATE SCHEMA #{schema}")
+  ActiveRecord::Base.connection.schema_search_path = schema
+  Minitest.after_run { ActiveRecord::Base.connection.execute("DROP SCHEMA IF EXISTS #{schema} CASCADE") }
+end
 ActiveRecord::Migration.verbose = false
 ActiveRecord::Schema.define do
   create_table(:users, force: true) { |t|

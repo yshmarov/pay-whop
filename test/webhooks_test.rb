@@ -50,11 +50,29 @@ class WebhooksTest < ActionDispatch::IntegrationTest
     post "/pay/whop/webhooks", params: body, headers: headers
     delivery = Pay::Whop::Delivery.sole
     api(:get, "payments/pay_test", {error: "unavailable"}, status: 503)
-    assert_raises(Whop_sdk::Errors::ApiError) { delivery.process! }
+    assert_raises(Pay::Whop::ApiError) { delivery.process! }
     assert_nil delivery.reload.processed_at
     api(:get, "payments/pay_test", payment)
     delivery.process!
     assert delivery.reload.processed_at?
+  end
+
+  test "a failing application callback retains the delivery and does not duplicate its charge" do
+    body, headers = sign_event
+    post "/pay/whop/webhooks", params: body, headers: headers
+    api(:get, "payments/pay_test", payment)
+    delivery = Pay::Whop::Delivery.sole
+    listener = Pay::Webhooks.delegator.subscribe("whop.payment.succeeded") { |_event| raise "Application fulfillment unavailable" }
+    assert_raises(RuntimeError) { delivery.process! }
+    assert_nil delivery.reload.processed_at
+    assert_equal 1, @customer.charges.count
+    ActiveSupport::Notifications.unsubscribe(listener)
+    listener = nil
+    delivery.process!
+    assert delivery.reload.processed_at?
+    assert_equal 1, @customer.charges.count
+  ensure
+    ActiveSupport::Notifications.unsubscribe(listener) if listener
   end
   test "reusing an event ID with a different resource is rejected" do
     body, headers = sign_event

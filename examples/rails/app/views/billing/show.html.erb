@@ -1,5 +1,6 @@
 <main id="main">
   <% if flash[:alert] %><div class="notice" role="alert"><%= flash[:alert] %></div><% end %>
+  <% if flash[:recovery_url].present? %><p><%= link_to "Complete test payment authentication on Whop", flash[:recovery_url], class: "btn secondary" %></p><% end %>
   <section class="hero" aria-labelledby="hero-title">
     <div>
       <p class="eyebrow">An open-source Rails payment adapter</p>
@@ -85,7 +86,7 @@ user.payment_processor.subscribed? # true</code></pre>
           <td><code><%= subscription.processor_id %></code></td>
           <td class="status"><%= subscription.status.humanize %><%= " · billing paused" if subscription.paused? %><%= " · cancellation scheduled" if subscription.on_grace_period? %></td>
           <td><%= subscription.current_period_end&.strftime("%d %b %Y, %H:%M UTC") || "—" %></td>
-          <td><% if subscription.resumable? %><%= button_to(subscription.paused? ? "Resume billing" : "Keep subscription", resume_subscription_path(subscription), class: "btn secondary") %><% elsif subscription.active? %><div class="actions"><%= button_to "Cancel at period end", cancel_subscription_path(subscription), class: "btn secondary" %><%= button_to "Pause billing", pause_subscription_path(subscription), class: "btn secondary" %></div><% end %></td>
+          <td><% if subscription.resumable? %><%= button_to(subscription.paused? ? "Resume billing" : "Keep subscription", resume_subscription_path(subscription), class: "btn secondary") %><% elsif subscription.active? %><div class="actions"><%= button_to "Cancel at period end", cancel_subscription_path(subscription), class: "btn secondary" %><%= button_to "Pause billing", pause_subscription_path(subscription), class: "btn secondary" %></div><% elsif %w[past_due incomplete].include?(subscription.status) %><%= button_to "Retry existing test payment", retry_subscription_path(subscription), class: "btn secondary" %><% end %></td>
         </tr><% end %>
       </tbody></table></div>
     <% end %>
@@ -102,13 +103,15 @@ user.payment_processor.subscribed? # true</code></pre>
       <h2 id="saved-title">Saved methods and invoices</h2>
       <p class="muted">Test a $5 charge using a method saved with Whop. Each session can make one saved-method charge and create one draft invoice. Issuing invoices requires Whop account verification.</p>
       <%= button_to "Refresh saved methods", sync_payment_methods_path, class: "btn secondary" %>
+      <p><%= button_to "Reconcile billing from Whop", reconcile_billing_path, class: "btn secondary" %></p>
+      <p class="muted">Reconciliation retrieves confirmed memberships, payments and invoices for this session's linked Whop member. It does not create a new payment.</p>
       <% @methods.each do |method| %><p><%= method.brand || method.payment_method_type %> ···· <%= method.last4 %></p><%= button_to "Charge $5 to this test method", saved_charge_path(payment_method_id: method.processor_id), class: "btn secondary" %><% end %>
       <% if ENV["WHOP_ONE_TIME_VARIANT_ID"].present? %><p><%= button_to "Create a $5 draft invoice", create_invoice_path, class: "btn secondary" %></p><% end %>
       <% @invoices.each do |invoice| %><p>Invoice <%= invoice.data["number"] || invoice.processor_id %> · <%= invoice.status.humanize %> <% if invoice.checkout_url.present? && URI.parse(invoice.checkout_url).host == "sandbox.whop.com" %>· <%= link_to "Open invoice", invoice.checkout_url %><% end %></p><% end %>
     </section>
   <% end %>
   <section class="details" aria-label="Test instructions and source code">
-    <div class="panel"><h2>Your test card</h2><p class="test-card">4242 4242 4242 4242</p><p class="muted">Any future expiry · any 3-digit CVC<br>Use fictional billing details. Never enter a real card.</p><p class="muted">The checkout displays the configured test price and any tax before you submit. All amounts are sandbox money.</p></div>
+    <div class="panel"><h2>Your test card</h2><p class="test-card">4242 4242 4242 4242</p><p class="muted">Any future expiry · any 3-digit CVC<br>Use fictional billing details. Never enter a real card.</p><details><summary>Test declines and authentication</summary><p class="muted">Declined payment: <code>4000 0000 0000 0002</code><br>Save successfully, decline later charges: <code>4000 0000 0000 0341</code><br>3D Secure: <code>5385 3083 6013 5181</code> · enter <code>Checkout1!</code> on the authentication screen.</p></details><p class="muted">The checkout displays the configured test price and any tax before you submit. All amounts are sandbox money.</p></div>
     <div class="panel"><h2>Use it in your Rails app</h2><p class="muted">The demo runs the same gem in this repository. Follow the setup guide for checkout, migrations and webhook configuration.</p><p><a href="https://github.com/yshmarov/pay-whop">Explore the gem on GitHub →</a></p><p class="muted">Alpha: one-time and recurring checkout, marketplace fees, saved methods, invoices, partial refunds and subscription controls. Plan swaps, seat changes and metered billing remain unsupported.</p></div>
   </section>
 </main>

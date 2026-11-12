@@ -2,7 +2,7 @@ module Pay
   module Whop
     class Entitlement < Resource
       def self.sync(id, account_id:)
-        object = Whop.api_attributes(Whop.client.memberships.retrieve(id: id, request_options: Whop.request_options))
+        object = Whop.api_attributes(Whop.api.memberships.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected membership ID" unless object.fetch("id") == id
         sync_object(object, account_id: account_id)
       end
@@ -22,7 +22,7 @@ module Pay
 
       def reactivate(days: nil, idempotency_key: SecureRandom.uuid)
         verify_configuration!
-        Whop.client.memberships.reactivate(id: processor_id, days: days, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.memberships.reactivate(id: processor_id, days: days, request_options: Whop.request_options(idempotency_key: idempotency_key))
         sync!
       end
     end

@@ -1,10 +1,12 @@
 require "rails"
+require "active_job/railtie"
 require "pay"
 require "whop_sdk"
 require "whop_sdk/helpers/verify_webhook"
 require "bigdecimal"
 require "net/http"
 require "pay/whop/version"
+require "pay/whop/api_proxy"
 
 module Pay
   module Whop
@@ -13,12 +15,44 @@ module Pay
     class IdentityError < Error; end
     class InvalidPayload < Error; end
 
+    class ApiError < Error
+      attr_reader :status, :code, :provider_error
+
+      def initialize(error)
+        @provider_error = error
+        @status = error.code if error.respond_to?(:code)
+        details = begin
+          body = JSON.parse(error.message)
+          body["error"] if body.is_a?(Hash)
+        rescue JSON::ParserError
+          nil
+        end
+        @code = details["type"] if details.is_a?(Hash)
+        super(if details.is_a?(Hash)
+                details["message"].presence || "Whop request failed"
+              else
+                "Whop request failed#{" (HTTP #{status})" if status}"
+              end)
+      end
+
+      def retryable? = status.nil? || status == 429 || status >= 500
+    end
+
     class PaymentIncomplete < Error
       attr_reader :payment
 
       def initialize(payment)
         @payment = payment
         super("Whop payment #{payment.id} is #{payment.status}; payment is not confirmed")
+      end
+
+      def recovery_url
+        value = Whop.api_attributes(payment)["recovery_url"]
+        return if value.blank?
+        uri = URI.parse(value)
+        value if uri.scheme == "https" && uri.host == ((Whop.environment == "sandbox") ? "sandbox.whop.com" : "whop.com")
+      rescue URI::InvalidURIError
+        nil
       end
     end
 
@@ -49,6 +83,27 @@ module Pay
 
     def self.request_options(idempotency_key: nil)
       {timeout_in_seconds: 20, additional_headers: {"Idempotency-Key" => idempotency_key}.compact}
+    end
+
+    def self.api = ApiProxy.new(client)
+
+    def self.with_api_errors
+      yield
+    rescue ::Whop_sdk::Errors::ApiError, Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout, SocketError, EOFError, Errno::ECONNRESET, Errno::ECONNREFUSED => error
+      raise ApiError.new(error)
+    end
+
+    def self.each_api_page(path, **query)
+      cursor = nil
+      seen = []
+      loop do
+        page = api_request(:get, path, query: query.merge(first: 100, after: cursor).compact)
+        page.fetch("data").each { |object| yield object }
+        break unless page.dig("page_info", "has_next_page")
+        cursor = page.dig("page_info", "end_cursor")
+        raise InvalidPayload, "Invalid pagination cursor" if cursor.blank? || seen.include?(cursor)
+        seen << cursor
+      end
     end
 
     def self.identity_purpose(account = account_id)
@@ -85,10 +140,15 @@ module Pay
     end
 
     # SDK 2.7 truncates refund decimals and ignores additional_body_parameters.
-    def self.api_request(method, path, body: nil, idempotency_key: nil)
+    def self.api_request(method, path, body: nil, query: {}, idempotency_key: nil)
+      with_api_errors { raw_api_request(method, path, body: body, query: query, idempotency_key: idempotency_key) }
+    end
+
+    def self.raw_api_request(method, path, body:, query:, idempotency_key:)
       validate_configuration!
       host = (environment == "sandbox") ? "sandbox-api.whop.com" : "api.whop.com"
       uri = URI::HTTPS.build(host: host, path: "/api/v1/#{path}")
+      uri.query = URI.encode_www_form(query) if query.any?
       request = Net::HTTP.const_get(method.to_s.capitalize).new(uri)
       request["Authorization"] = "Bearer #{api_key}"
       request["Api-Version-Date"] = api_version
@@ -104,7 +164,7 @@ module Pay
         error = ::Whop_sdk::Errors::ResponseError.subclass_for_code(response.code.to_i)
         raise error.new(response.body, code: response.code.to_i)
       end
-      response.body.to_s.empty? ? {} : JSON.parse(response.body)
+      response.body.to_s.empty? ? {} : JSON.parse(response.body, decimal_class: BigDecimal)
     end
 
     def self.minor_units(money, currency: nil)

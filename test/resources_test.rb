@@ -31,7 +31,7 @@ class ResourcesTest < ActiveSupport::TestCase
     api(:get, "invoices/pay_invoice", invoice)
     record = Pay::Whop::Invoice.sync("pay_invoice", account_id: "biz_test")
     api(:post, "invoices/pay_invoice/issue", {error: "unavailable"}, status: 503)
-    assert_raises(Whop_sdk::Errors::ApiError) { record.issue }
+    assert_raises(Pay::Whop::ApiError) { record.issue }
     assert_equal "draft", record.reload.status
   end
 

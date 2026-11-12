@@ -2,7 +2,7 @@ module Pay
   module Whop
     class Transfer < Resource
       def self.sync(id, account_id:)
-        object = Whop.api_attributes(Whop.client.transfers.retrieve(id: id, request_options: Whop.request_options))
+        object = Whop.api_attributes(Whop.api.transfers.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected transfer ID" unless object.fetch("id") == id
         destination = object.fetch("destination").fetch("id")
         unless object.dig("origin", "id") == Whop.account_id && [Whop.account_id, destination].include?(account_id)

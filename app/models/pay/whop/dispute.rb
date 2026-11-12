@@ -2,7 +2,7 @@ module Pay
   module Whop
     class Dispute < Resource
       def self.sync(id, account_id:)
-        object = Whop.api_attributes(Whop.client.disputes.retrieve(id: id, request_options: Whop.request_options))
+        object = Whop.api_attributes(Whop.api.disputes.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected dispute ID" unless object.fetch("id") == id
         Whop.verify_account!(object, expected: account_id)
         payment_id = object.fetch("payment").fetch("id")
@@ -14,13 +14,13 @@ module Pay
 
       def update_evidence(evidence:, idempotency_key: SecureRandom.uuid)
         verify_configuration!
-        Whop.client.disputes.update(id: processor_id, evidence: evidence, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.disputes.update(id: processor_id, evidence: evidence, request_options: Whop.request_options(idempotency_key: idempotency_key))
         sync!
       end
 
       def upload_evidence(documents:, idempotency_key: SecureRandom.uuid)
         verify_configuration!
-        Whop.client.disputes.upload_evidence(id: processor_id, documents: documents,
+        Whop.api.disputes.upload_evidence(id: processor_id, documents: documents,
           request_options: Whop.request_options(idempotency_key: idempotency_key))
         sync!
       end
@@ -28,7 +28,7 @@ module Pay
       %i[submit accept].each do |operation|
         define_method(operation) do |idempotency_key: SecureRandom.uuid|
           verify_configuration!
-          Whop.client.disputes.public_send(operation, id: processor_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
+          Whop.api.disputes.public_send(operation, id: processor_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
           sync!
         end
       end

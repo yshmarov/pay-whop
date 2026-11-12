@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+require "bundler"
+require "fileutils"
+require "tmpdir"
+require "rubygems/package"
+require "open3"
+
+source = File.expand_path("..", __dir__)
+Dir.mktmpdir("pay-whop-install-") do |directory|
+  artifact = File.join(directory, "pay-whop.gem")
+  specification = Gem::Specification.load(File.join(source, "pay-whop.gemspec"))
+  Dir.chdir(source) { Gem::Package.build(specification, false, false, artifact) }
+  package = File.join(directory, "adapter")
+  Gem::Package.new(artifact).extract_files(package)
+  File.write(File.join(package, "pay-whop.gemspec"), Gem::Package.new(artifact).spec.to_ruby)
+  app = File.join(directory, "fresh_app")
+  rails = Gem.bin_path("railties", "rails")
+  rails_version = Gem::Specification.find_by_name("rails").version
+  sqlite_version = Gem::Specification.find_by_name("sqlite3").version
+  pay_version = Gem::Specification.find_by_name("pay").version
+
+  run = ->(*command, chdir: directory) do
+    Bundler.with_unbundled_env do
+      output, status = Open3.capture2e(*command, chdir: chdir)
+      abort output unless status.success?
+      puts output if ENV["INSTALL_SMOKE_VERBOSE"] == "1"
+    end
+  end
+  run.call(Gem.ruby, rails, "new", app, "--minimal", "--skip-bundle", "--skip-git", "--skip-asset-pipeline", "--skip-bootsnap")
+  File.write(File.join(app, "Gemfile"), <<~GEMFILE)
+    source "https://rubygems.org"
+    gem "rails", "#{rails_version}"
+    gem "sqlite3", "#{sqlite_version}"
+    gem "pay", "#{pay_version}"
+    gem "pay-whop", path: #{package.inspect}
+  GEMFILE
+  File.write(File.join(app, "config/initializers/pay_whop.rb"), <<~RUBY)
+    require "mail"
+    Pay.enabled_processors = []
+    Pay.send_emails = false
+    Pay.support_email = "installation@example.test"
+    Pay::Whop.configure do |config|
+      config.api_key = "installation-test-unused"
+      config.account_id = "biz_install_test"
+      config.environment = "sandbox"
+      config.webhook_secret = "ws_install_test"
+    end
+  RUBY
+  run.call("bundle", "install", "--local", chdir: app)
+  run.call(Gem.ruby, "bin/rails", "generate", "model", "User", "email:string", chdir: app)
+  File.write(File.join(app, "app/models/user.rb"), "class User < ApplicationRecord\n  pay_customer\nend\n")
+  %w[pay:install:migrations pay_whop:install:migrations db:migrate].each do |task|
+    run.call(Gem.ruby, "bin/rails", task, chdir: app)
+  end
+  File.write(File.join(app, "install_check.rb"), <<~RUBY)
+    Rails.application.eager_load!
+    user = User.create!(email: "installation@example.test")
+    customer = user.set_payment_processor(:whop)
+    customer.bind_account!
+    raise "Wrong customer class" unless customer.is_a?(Pay::Whop::Customer)
+    raise "Invalid customer metadata" unless Pay::Whop::Customer.find_signed(customer.checkout_metadata.fetch("pay_customer"), purpose: Pay::Whop.identity_purpose) == customer
+    raise "Missing resource migration" unless Pay::Whop::Payout.table_exists?
+    raise "Missing webhook migration" unless Pay::Whop::Delivery.table_exists?
+    routes = Rails.application.routes.recognize_path("/pay/whop/webhooks", method: :post)
+    raise "Webhook route missing" unless routes[:controller] == "pay/whop/webhooks"
+    raise "Recovery job missing" unless Pay::Whop::RecoverDeliveriesJob < ActiveJob::Base
+    puts "Packaged gem installed, migrated and booted in a fresh Rails app."
+  RUBY
+  run.call(Gem.ruby, "bin/rails", "runner", "install_check.rb", chdir: app)
+  puts "Fresh Rails #{rails_version}, Pay #{pay_version}: install smoke passed."
+end

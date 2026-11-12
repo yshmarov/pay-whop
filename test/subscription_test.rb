@@ -34,7 +34,7 @@ class SubscriptionTest < ActiveSupport::TestCase
     api(:get, "memberships/mem_test", membership)
     subscription = Pay::Whop::Subscription.sync("mem_test")
     api(:post, "memberships/mem_test/cancel", {error: "unavailable"}, status: 503)
-    assert_raises(Whop_sdk::Errors::ApiError) { subscription.cancel }
+    assert_raises(Pay::Whop::ApiError) { subscription.cancel }
     assert_nil subscription.reload.ends_at
   end
 

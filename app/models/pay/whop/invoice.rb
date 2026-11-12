@@ -2,7 +2,7 @@ module Pay
   module Whop
     class Invoice < Resource
       def self.sync(id, account_id:)
-        object = Whop.api_attributes(Whop.client.invoices.retrieve(id: id, request_options: Whop.request_options))
+        object = Whop.api_attributes(Whop.api.invoices.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected invoice ID" unless object.fetch("id") == id
         Whop.verify_account!(object, expected: account_id)
         customer = Customer.resolve!(object)
@@ -19,14 +19,14 @@ module Pay
 
       def issue(charge_at: nil, idempotency_key: SecureRandom.uuid)
         verify_configuration!
-        Whop.client.invoices.issue(id: processor_id, charge_at: charge_at&.iso8601, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.invoices.issue(id: processor_id, charge_at: charge_at&.iso8601, request_options: Whop.request_options(idempotency_key: idempotency_key))
         sync!
       end
 
       %i[void mark_uncollectible unschedule].each do |operation|
         define_method(operation) do |idempotency_key: SecureRandom.uuid|
           verify_configuration!
-          Whop.client.invoices.public_send(operation, id: processor_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
+          Whop.api.invoices.public_send(operation, id: processor_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
           sync!
         end
       end
@@ -41,20 +41,20 @@ module Pay
 
       def deliver(idempotency_key: SecureRandom.uuid)
         verify_configuration!
-        Whop.client.invoices.send_(id: processor_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
+        Whop.api.invoices.send_(id: processor_id, request_options: Whop.request_options(idempotency_key: idempotency_key))
         sync!
       end
 
       def update_details(memo: nil, due_at: nil, idempotency_key: SecureRandom.uuid)
         verify_configuration!
-        Whop.client.invoices.update(id: processor_id, memo: memo, due_at: due_at&.iso8601,
+        Whop.api.invoices.update(id: processor_id, memo: memo, due_at: due_at&.iso8601,
           request_options: Whop.request_options(idempotency_key: idempotency_key))
         sync!
       end
 
       def pdf_url
         verify_configuration!
-        Whop.client.invoices.generate_pdf(id: processor_id, request_options: Whop.request_options).url
+        Whop.api.invoices.generate_pdf(id: processor_id, request_options: Whop.request_options).url
       end
     end
   end

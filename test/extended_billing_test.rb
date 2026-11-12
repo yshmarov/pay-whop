@@ -135,7 +135,7 @@ class ExtendedBillingTest < ActiveSupport::TestCase
     api(:get, "payments/pay_test", payment)
     charge = Pay::Whop::Charge.sync("pay_test")
     request = api(:post, "payments/pay_test/refund", {error: "unavailable"}, body: {partial_amount: 0.01}, status: 503)
-    assert_raises(Whop_sdk::Errors::ApiError) { charge.refund!(1, idempotency_key: "partial-retry") }
+    assert_raises(Pay::Whop::ApiError) { charge.refund!(1, idempotency_key: "partial-retry") }
     assert_requested request, times: 1
     assert_equal 0, charge.reload.amount_refunded
   end
