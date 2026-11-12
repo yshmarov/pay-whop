@@ -71,6 +71,8 @@ class MarketplaceOperationsTest < ActiveSupport::TestCase
     assert_equal "completed", record.reload.status
     Pay::Whop::Payout.sync_object(payout(status: "reversed").stringify_keys, merchant: merchant)
     assert_equal "reversed", record.reload.status
+    Pay::Whop::Payout.sync_object(payout(status: "completed").stringify_keys, merchant: merchant)
+    assert_equal "reversed", record.reload.status
   end
 
   test "platform payout webhooks synchronize without creating a fictitious seller" do
@@ -86,6 +88,9 @@ class MarketplaceOperationsTest < ActiveSupport::TestCase
     record.sync!
     assert_equal "completed", record.reload.status
     api(:get, "payouts?account_id=biz_test&first=100", {data: [payout(status: "reversed")], page_info: {has_next_page: false}})
+    record.sync!
+    assert_equal "reversed", record.reload.status
+    api(:get, "payouts?account_id=biz_test&first=100", {data: [payout(status: "completed")], page_info: {has_next_page: false}})
     record.sync!
     assert_equal "reversed", record.reload.status
     assert_empty Pay::Whop::Merchant.all

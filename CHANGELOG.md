@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0.alpha.4
+
+- Keep reversed payouts terminal when overlapping reads return an older completed state, for both platform and seller payouts.
+
 ## 0.1.0.alpha.3
 
 - Retry existing failed membership payments and expose environment-validated 3DS recovery links.

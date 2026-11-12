@@ -1,12 +1,12 @@
 # Verification
 
-Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: `0.1.0.alpha.3`.
+Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: `0.1.0.alpha.4`.
 
 ## Versions and automated coverage
 
 Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and PostgreSQL, with WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
 
-The local suite passes **100 tests / 367 assertions** and Standard Ruby linting. The local suite also passes with Pay 12.3.0; installation from the built gem into a fresh Rails application passes. GitHub Actions runs Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
+The local suite passes **100 tests / 369 assertions** and Standard Ruby linting. The local suite also passes with Pay 12.3.0; installation from the built gem into a fresh Rails application passes. GitHub Actions runs Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
 
 Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries. Expanded tests cover existing-payment retries without duplicate charges, renewal restrictions, normalized API errors including lazy pagination/timeouts, application callback failure recovery, payout ownership/pagination/reversals, merchant capabilities, decimal balances and linked-customer reconciliation.
 

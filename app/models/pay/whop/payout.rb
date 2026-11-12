@@ -28,6 +28,7 @@ module Pay
         end
         record.with_lock do
           raise IdentityError, "Platform payout has an unexpected owner" if record.customer_id || record.merchant_id
+          return record if record.status == "reversed" && object["status"] != "reversed"
           return record if %w[completed reversed failed denied canceled].include?(record.status) && %w[requested in_review processing].include?(object["status"])
           record.update!(**attributes, status: object.fetch("status"))
         end

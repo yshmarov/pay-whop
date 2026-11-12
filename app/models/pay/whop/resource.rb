@@ -17,6 +17,7 @@ module Pay
             raise InvalidPayload, "Conflicting final transfer state" if object["status"] != record.status
           end
           if self == Payout && record.persisted? && %w[completed reversed failed denied canceled].include?(record.status)
+            return record if record.status == "reversed" && object["status"] != "reversed"
             return record if %w[requested in_review processing].include?(object["status"])
           end
           owner_key = owner.is_a?(Merchant) ? :merchant : :customer
