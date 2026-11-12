@@ -26,6 +26,8 @@ AddObjectToPayModels.new.migrate(:up)
 CreatePayWhopDeliveries.new.migrate(:up)
 require_relative "../db/migrate/20261107120000_create_pay_whop_resources"
 CreatePayWhopResources.new.migrate(:up)
+require_relative "../examples/rails/db/migrate/20261112000000_create_demo_simulations"
+CreateDemoSimulations.new.migrate(:up)
 
 class ActiveSupport::TestCase
   include ActiveJob::TestHelper

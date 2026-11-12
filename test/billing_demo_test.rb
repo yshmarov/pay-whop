@@ -102,4 +102,78 @@ class BillingDemoTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert_not_requested :post, %r{memberships/mem_private/pause}
   end
+  test "simulations work without Whop linkage and never create billing records" do
+    begin_demo
+    ["invoice", "transfer"].each do |kind|
+      post "/simulations/#{kind}/start", params: {authenticity_token: csrf_token}
+      assert_redirected_to "/#simulations"
+      get "/"
+      post "/simulations/#{kind}/start", params: {authenticity_token: csrf_token}
+      get "/"
+    end
+    assert_equal 2, DemoSimulation.count
+    post "/simulations/invoice/issue", params: {authenticity_token: csrf_token}
+    get "/"
+    post "/simulations/invoice/pay", params: {authenticity_token: csrf_token}
+    get "/"
+    post "/simulations/transfer/succeed", params: {authenticity_token: csrf_token}
+    follow_redirect!
+    assert_select "article", text: /Simulated status: Paid/
+    assert_select "article", text: /Simulated status: Succeeded/
+    assert_select "p", text: /do not call Whop/
+    assert_nil User.order(:id).last.payment_processor.processor_id
+    assert_empty Pay::Whop::Charge.all
+    assert_empty Pay::Whop::Subscription.all
+    assert_empty Pay::Whop::Invoice.all
+    assert_empty Pay::Whop::Transfer.all
+    assert_empty Pay::Whop::Delivery.all
+  end
+
+  test "simulation requests require a session and cannot target another visitor" do
+    get "/"
+    post "/simulations/invoice/start", params: {authenticity_token: csrf_token}
+    assert_redirected_to "/"
+    assert_empty DemoSimulation.all
+    begin_demo
+    post "/simulations/invoice/start", params: {authenticity_token: csrf_token}
+    get "/"
+    simulation = DemoSimulation.sole
+    stranger = open_session
+    begin_demo(stranger)
+    refute_includes stranger.response.body, simulation.reference
+    token = Nokogiri::HTML(stranger.response.body).at_css("meta[name=csrf-token]")["content"]
+    stranger.post "/simulations/invoice/issue", params: {id: simulation.id, authenticity_token: token}
+    assert_equal 404, stranger.response.status
+    assert_equal "draft", simulation.reload.status
+  end
+
+  test "invalid simulation steps and production requests cannot advance a flow" do
+    begin_demo
+    post "/simulations/arbitrary/start", params: {authenticity_token: csrf_token}
+    assert_response :bad_request
+    get "/"
+    post "/simulations/invoice/start", params: {authenticity_token: csrf_token}
+    get "/"
+    post "/simulations/invoice/pay", params: {authenticity_token: csrf_token}
+    follow_redirect!
+    assert_select "[role=alert]", text: /no longer available/
+    assert_equal "draft", DemoSimulation.sole.status
+    Pay::Whop.stub(:environment, "production") do
+      post "/simulations/invoice/issue", params: {authenticity_token: csrf_token}
+      assert_response :not_found
+    end
+    assert_equal "draft", DemoSimulation.sole.reload.status
+  end
+
+  test "simulation mutations require CSRF protection" do
+    begin_demo
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    assert_no_difference "DemoSimulation.count" do
+      post "/simulations/transfer/start"
+      assert_response :unprocessable_entity
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
 end

@@ -33,6 +33,42 @@ redirect_to checkout.purchase_url,
 user.payment_processor.subscribed? # true</code></pre>
     </div>
   </section>
+  <section id="simulations" class="panel simulation-panel" aria-labelledby="simulations-title">
+    <p class="pill simulation-label">SIMULATION · LOCAL DEMO DATA</p>
+    <h2 id="simulations-title">Invoice and transfer simulations</h2>
+    <p class="muted">Explore these flows without a Whop account or identity verification. These controls only update this demo: they do not call Whop, send invoices, charge cards, move funds or generate Whop webhooks. Simulated outcomes do not confirm that Whop can perform the operation.</p>
+    <% if @customer %>
+      <div class="simulation-grid">
+        <% DemoSimulation::FLOWS.each_key do |kind| %>
+          <% simulation = @simulations[kind] %>
+          <article class="simulation-card" aria-labelledby="simulation-<%= kind %>-title">
+            <h3 id="simulation-<%= kind %>-title">Simulated <%= kind %></h3>
+            <p class="muted"><%= kind == "invoice" ? "$5.00 USD · draft, issue, overdue, pay or void" : "$4.00 USD · platform → example seller · success or failure" %></p>
+            <% if simulation %>
+              <p><code><%= simulation.reference %></code></p>
+              <p><strong>Simulated status: <%= simulation.status.humanize %></strong></p>
+              <div class="actions">
+                <% simulation.actions.each_key do |event| %>
+                  <%= button_to DemoSimulation::LABELS.fetch(event), simulation_path(kind: kind, event: event), class: "btn secondary" %>
+                <% end %>
+                <%= button_to "Reset #{kind} simulation", simulation_path(kind: kind, event: "reset"), class: "btn secondary" %>
+              </div>
+              <h4>Simulated activity</h4>
+              <ol class="simulation-history">
+                <% simulation.history.each do |entry| %>
+                  <li><%= entry.fetch("status").humanize %> · <time datetime="<%= entry.fetch("at") %>"><%= Time.iso8601(entry.fetch("at")).utc.strftime("%d %b %Y, %H:%M:%S UTC") %></time></li>
+                <% end %>
+              </ol>
+            <% else %>
+              <%= button_to "Start #{kind} simulation", simulation_path(kind: kind, event: "start"), class: "btn secondary" %>
+            <% end %>
+          </article>
+        <% end %>
+      </div>
+    <% else %>
+      <%= button_to "Start a session to try simulations", start_session_path, class: "btn secondary" %>
+    <% end %>
+  </section>
   <section class="steps" aria-label="How to try the demo">
     <div><div class="step-number">01 / CHECK OUT</div><h3>Pay with a test card</h3><p class="muted">Open the hosted checkout and sign into a Whop sandbox account. Use the test details below.</p></div>
     <div><div class="step-number">02 / SYNC</div><h3>Let the webhook arrive</h3><p class="muted">Whop signs the event. The adapter verifies it, fetches the current state and updates Pay.</p></div>

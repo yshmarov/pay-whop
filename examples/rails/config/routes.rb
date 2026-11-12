@@ -9,5 +9,6 @@ Rails.application.routes.draw do
   post "payment_methods/sync", to: "billing#sync_methods", as: :sync_payment_methods
   post "charge", to: "billing#charge", as: :saved_charge
   post "invoice", to: "billing#invoice", as: :create_invoice
+  post "simulations/:kind/:event", to: "billing#simulate", as: :simulation
   post "charges/:id/refund", to: "billing#refund", as: :refund_charge
 end

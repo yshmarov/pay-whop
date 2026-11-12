@@ -1,12 +1,12 @@
 # Verification
 
-Verification date: 7 November 2026. Release: `0.1.0.alpha.2`.
+Provider verification date: 7 November 2026. Demo simulation verification: 12 November 2026. Release: `0.1.0.alpha.2`.
 
 ## Versions and automated coverage
 
 Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
 
-The local suite passes **65 tests / 207 assertions** and Standard Ruby linting. The same checks passed on Ruby 3.3, 3.4 and 4.0 in [GitHub Actions](https://github.com/yshmarov/pay-whop/actions/runs/42368971131).
+The local suite passes **71 tests / 250 assertions** and Standard Ruby linting. GitHub Actions runs the same checks on Ruby 3.3, 3.4 and 4.0; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
 
 Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries.
 
@@ -38,7 +38,7 @@ The [hosted playground](https://pay-whop.onrender.com/) uses the adapter and rec
 
 A generated checkout or payout URL is not proof of settled payment or bank withdrawal. Authentication challenges, dispute submission and evidence upload, one-time entitlement reactivation, payment-method deletion, promo-code application, and full trial/failed-renewal lifecycles have HTTP-contract coverage only where exercised by tests, not complete real-provider coverage. Do not describe them as sandbox-certified.
 
-The hosted webhook subscribes to all 26 adapter events with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. Desktop layout was inspected; the browser viewport override did not apply, so a fresh mobile visual check remains outstanding.
+The hosted webhook subscribes to all 26 adapter events with subaccount events enabled. No pending deliveries remained after the checkout and setup tests. The earlier provider-flow review covered desktop layout; a full mobile/accessibility assessment remains outstanding.
 
 ## Integration findings
 
@@ -60,3 +60,11 @@ This is an alpha integration, not a declaration of production readiness or full 
 Plan swaps/proration, recurring seat changes and metered billing are not implemented. The Whop `swaps` API is for currencies, not subscription plans. The adapter does not implement Whop's unrelated chat, ads, trading, cards or affiliate administration APIs; callers can use the official SDK for those.
 
 The public playground intentionally has no seller administration or money-transfer controls. Marketplace buyers use a preconfigured sandbox seller. Invoice controls create drafts until the account can issue invoices. Secrets stay in private environment settings. The app's encrypted session lasts 30 days; reusing the same Whop buyer in an unrelated new session can trigger the adapter's deliberate identity-conflict protection.
+
+## Demo-only simulations
+
+The public playground has a separate, amber-labelled simulation section. Invoice flows cover draft → issued → paid, past due → paid, and void outcomes. Transfer flows cover pending → succeeded/failed. Each can be reset. State and activity persist for the visitor's own demo session; another session cannot read or advance those records.
+
+These controls only write separate demo records. They make no Whop API calls, create no provider resources, enqueue no provider webhook deliveries, create no Pay charges or subscriptions and move no funds. A simulated outcome is not proof of API compatibility, business verification, actual invoice payment or settled transfer. The gem's real invoice and transfer methods keep their provider checks and errors. The simulator is available before linking a Whop buyer, and mutation requests reject a production Whop environment.
+
+Automated coverage checks lifecycle transitions, repeated starts, reset, terminal outcomes, session isolation, CSRF, the sandbox guard and absence of Pay billing records or external requests. Local browser checks exercised invoice issuance/overdue/payment and transfer failure before deployment. The simulation section was inspected at 320px and 390px viewport widths with no page overflow; this is not a full accessibility assessment.

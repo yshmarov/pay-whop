@@ -2,7 +2,7 @@ class BillingController < ActionController::Base
   layout "application"
   before_action :load_customer
   before_action :require_customer, except: [:show, :start]
-  rate_limit to: 10, within: 1.minute, only: [:start, :checkout, :cancel, :resume, :refund, :pause, :sync_methods, :charge, :invoice], with: -> { redirect_to root_path, alert: "Please wait a minute before trying again." }
+  rate_limit to: 10, within: 1.minute, only: [:start, :checkout, :cancel, :resume, :refund, :pause, :sync_methods, :charge, :invoice, :simulate], with: -> { redirect_to root_path, alert: "Please wait a minute before trying again." }
 
   rescue_from Pay::Error, Whop_sdk::Errors::ApiError do |error|
     message = if error.is_a?(Pay::Whop::PaymentIncomplete)
@@ -21,6 +21,7 @@ class BillingController < ActionController::Base
     @methods = @customer ? @customer.payment_methods : []
     @invoices = @customer ? @customer.invoices.order(created_at: :desc) : []
     @marketplace_enabled = ENV["DEMO_MERCHANT_ID"].present?
+    @simulations = @user ? @user.demo_simulations.index_by(&:kind) : {}
   end
 
   def start
@@ -96,6 +97,20 @@ class BillingController < ActionController::Base
     @customer.create_invoice(items: [{variant_id: ENV.fetch("WHOP_ONE_TIME_VARIANT_ID"), quantity: 1}],
       idempotency_key: "#{@customer.owner.checkout_key}-invoice")
     redirect_to root_path
+  end
+
+  def simulate
+    raise ActiveRecord::RecordNotFound unless Pay::Whop.environment == "sandbox"
+    kind = params[:kind]
+    raise ActionController::BadRequest unless DemoSimulation::FLOWS.key?(kind)
+    if params[:event] == "start"
+      @user.with_lock { @user.demo_simulations.find_or_create_by!(kind: kind) }
+    else
+      @user.demo_simulations.find_by!(kind: kind).advance!(params[:event])
+    end
+    redirect_to root_path(anchor: "simulations")
+  rescue DemoSimulation::InvalidTransition
+    redirect_to root_path(anchor: "simulations"), alert: "That simulation step is no longer available. The current simulated state is shown below."
   end
 
   private

@@ -4,6 +4,8 @@ Whop payments, recurring billing and marketplace subaccounts for [Pay](https://g
 
 **[Try the public sandbox demo →](https://pay-whop.onrender.com/)** — one-time payments, subscriptions, marketplace fees, saved methods and refunds with test money. Free hosting can take about a minute to wake up.
 
+The demo also includes **[invoice and transfer simulations](https://pay-whop.onrender.com/#simulations)**. Start a browser session, then try invoice issuance, overdue/payment/void outcomes and transfer success/failure. No Whop account or KYC is needed for these controls. They update separate demo records with `sim_` references and a visible activity history; they never call Whop, create Pay charges, grant subscription access or generate provider webhooks. Reset each flow to try another outcome. These simulations do not certify real invoice issuance or transfer settlement.
+
 **Early community adapter, not an official Whop or Pay integration.** Start in Whop's sandbox. The alpha supports direct billing and registered Whop subaccounts. Use one platform account and one environment per Rails database.
 
 ```ruby
