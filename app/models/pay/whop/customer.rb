@@ -60,6 +60,10 @@ module Pay
       def verify_resource!(object)
         verify_configuration!
         Whop.verify_account!(object, expected: account_id)
+        token = object.dig("metadata", "pay_customer")
+        if token.present? && self.class.find_signed(token, purpose: Whop.identity_purpose(account_id)) != self
+          raise IdentityError, "Whop resource belongs to another customer"
+        end
         unless self.class.resolve!(object).id == id
           raise IdentityError, "Whop resource belongs to another customer"
         end
@@ -135,6 +139,19 @@ module Pay
         raise InvalidPayload, "Unexpected payment ID" unless object.fetch("id") == id
         verify_resource!(object)
         result
+      end
+
+      def membership(id)
+        result = Whop.api.memberships.retrieve(id: id, request_options: Whop.request_options)
+        object = Whop.api_attributes(result)
+        raise InvalidPayload, "Unexpected membership ID" unless object.fetch("id") == id
+        verify_resource!(object)
+        result
+      end
+
+      def sync_membership(id)
+        verify_configuration!
+        Subscription.sync(id, account_id: account_id, customer: self)
       end
 
       def capture(payment_id, idempotency_key: SecureRandom.uuid)

@@ -1,6 +1,35 @@
 require "test_helper"
 
 class SubscriptionTest < ActiveSupport::TestCase
+  test "trial expiry cannot grant indefinite access while a renewal webhook is missing" do
+    finish = 21.days.from_now.change(usec: 0)
+    api(:get, "memberships/mem_test", membership(status: "trialing", initial_price: money("0.00"), current_period_end: finish.iso8601))
+    subscription = Pay::Whop::Subscription.sync("mem_test")
+    assert subscription.active?
+    assert subscription.on_trial?
+    travel_to(finish) do
+      assert_not subscription.active?
+      assert_not @customer.subscribed?
+    end
+  end
+
+  test "verified trial membership does not require a fabricated positive charge" do
+    api(:get, "memberships/mem_test", membership(status: "trialing", initial_price: money("0.00"), current_period_end: 21.days.from_now.iso8601))
+    result = @customer.membership("mem_test")
+    subscription = @customer.sync_membership(result.id)
+    assert subscription.on_trial?
+    assert_empty @customer.charges
+  end
+
+  test "reading another customer's membership does not bind their previously unbound member" do
+    other = User.create!(email: "other@example.test").set_payment_processor(:whop, data: {whop_account_id: "biz_test", whop_environment: "sandbox"})
+    api(:get, "memberships/mem_test", membership(metadata: other.checkout_metadata))
+    assert_raises(Pay::Whop::IdentityError) { @customer.membership("mem_test") }
+    assert_raises(Pay::Whop::IdentityError) { @customer.sync_membership("mem_test") }
+    assert_nil other.reload.processor_id
+    assert_nil @customer.reload.processor_id
+  end
+
   test "membership maps to a Pay subscription and repeat synchronization is idempotent" do
     api(:get, "memberships/mem_test", membership)
     2.times { Pay::Whop::Subscription.sync("mem_test") }
