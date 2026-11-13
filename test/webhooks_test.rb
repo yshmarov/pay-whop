@@ -45,6 +45,32 @@ class WebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "pay_test", Pay::Whop::Delivery.sole.resource_id
   end
 
+  test "sandbox refund payload with a nested payment reconciles the canonical payment" do
+    body, headers = sign_event(type: "refund.created", data: {"id" => "rf_test", "payment" => {"id" => "pay_test"}})
+    assert_enqueued_with(job: Pay::Whop::ProcessDeliveryJob) do
+      post "/pay/whop/webhooks", params: body, headers: headers
+    end
+    assert_response :ok
+    delivery = Pay::Whop::Delivery.sole
+    assert_equal "pay_test", delivery.resource_id
+    api(:get, "payments/pay_test", payment(refunded_amount: money("10.43")))
+    delivery.process!
+    assert_equal 1043, @customer.charges.sole.amount_refunded
+    assert delivery.reload.processed_at?
+  end
+
+  test "refunds with conflicting or missing payment IDs create no delivery" do
+    [{"payment_id" => "pay_test", "payment" => {"id" => "pay_other"}},
+      {"payment" => {}}, {"payment" => "pay_test"}, {"payment_id" => 123}].each do |reference|
+      body, headers = sign_event(type: "refund.created", data: {"id" => "rf_test"}.merge(reference))
+      assert_no_enqueued_jobs do
+        post "/pay/whop/webhooks", params: body, headers: headers
+      end
+      assert_response :bad_request
+      assert_empty Pay::Whop::Delivery.all
+    end
+  end
+
   test "API failure leaves the delivery available for retry" do
     body, headers = sign_event
     post "/pay/whop/webhooks", params: body, headers: headers
