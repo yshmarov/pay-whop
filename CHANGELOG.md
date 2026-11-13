@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve explicit adaptive-pricing settings on inline checkouts instead of losing them in SDK serialization.
+
 - Expire trial access at its confirmed end even when the renewal webhook is delayed. Add customer-scoped membership reads/synchronization for verified free-trial returns, and reject another customer's signed resource before binding its member.
 
 - Allow hosts to opt into multiple Pay customers for one Whop member with `Pay::Whop.allow_shared_members = true`. Each payment or membership must carry a valid signed customer reference when the member is ambiguous; an already linked customer cannot change its member or seller.

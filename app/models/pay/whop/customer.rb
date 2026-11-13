@@ -16,14 +16,22 @@ module Pay
         bind_account!
         raise ArgumentError, "Choose a variant or variant_id" if mode == "payment" && [variant_id, variant].compact.size != 1
         raise ArgumentError, "Unknown checkout option" unless (options.keys - %i[affiliate_code currency payment_method_configuration three_ds_level]).empty?
+        if variant&.key?(:adaptive_pricing_enabled)
+          body = options.merge(account_id: account_id, variant: variant, mode: mode, redirect_url: redirect_url,
+            metadata: checkout_metadata(metadata, name: name)).compact
+          # SDK 2.7 omits the adaptive pricing setting from inline variants.
+          result = Whop.api_request(:post, "checkout_configurations", body: body, idempotency_key: idempotency_key)
+          return ::Whop_sdk::CheckoutConfigurations::Types::CreateCheckoutConfigurationsResponse.load(JSON.generate(result))
+        end
         Whop.api.checkout_configurations.create(**options,
           account_id: account_id, variant_id: variant_id, variant: variant, mode: mode, redirect_url: redirect_url,
           metadata: checkout_metadata(metadata, name: name),
           request_options: Whop.request_options(idempotency_key: idempotency_key))
       end
 
-      def checkout_charge(amount:, redirect_url:, currency: "usd", decimals: 2, application_fee_amount: nil, **options)
+      def checkout_charge(amount:, redirect_url:, currency: "usd", decimals: 2, application_fee_amount: nil, adaptive_pricing_enabled: nil, **options)
         variant = {currency: currency, billing_type: "one_time", initial_price: Whop.major_units(amount, decimals: decimals)}
+        variant[:adaptive_pricing_enabled] = adaptive_pricing_enabled unless adaptive_pricing_enabled.nil?
         if application_fee_amount
           raise ArgumentError, "Application fee must be below the price" unless application_fee_amount < amount
           variant[:application_fee_amount] = Whop.major_units(application_fee_amount, decimals: decimals)

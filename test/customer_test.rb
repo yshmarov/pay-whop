@@ -4,7 +4,7 @@ class CustomerTest < ActiveSupport::TestCase
   test "Pay selects the community adapter and checkout attaches a signed customer reference" do
     request = api(:post, "checkout_configurations", {id: "ch_test", purchase_url: "https://sandbox.whop.com/checkout/test"})
       .with { |req|
-        body = JSON.parse(req.body)
+        body = JSON.parse(req.body, decimal_class: BigDecimal)
         token = body.dig("metadata", "pay_customer")
         Pay::Whop::Customer.find_signed(token, purpose: Pay::Whop.identity_purpose) == @customer &&
           body["account_id"] == "biz_test" && body["variant_id"] == "plan_test" &&
@@ -12,6 +12,19 @@ class CustomerTest < ActiveSupport::TestCase
       }
     result = @user.payment_processor.checkout(variant_id: "plan_test", redirect_url: "https://example.test/billing", idempotency_key: "checkout-attempt-1")
     assert_equal "https://sandbox.whop.com/checkout/test", result.purchase_url
+    assert_requested request
+  end
+
+  test "fixed currency checkout disables adaptive pricing on the wire" do
+    request = api(:post, "checkout_configurations", {id: "ch_fixed", purchase_url: "https://sandbox.whop.com/checkout/fixed"})
+      .with { |req|
+        body = JSON.parse(req.body, decimal_class: BigDecimal)
+        body.dig("variant", "adaptive_pricing_enabled") == false && body.dig("variant", "currency") == "eur" &&
+          body.dig("variant", "initial_price") == BigDecimal("9.99") && req.headers["Idempotency-Key"] == "fixed-currency"
+      }
+    result = @customer.checkout_charge(amount: 999, currency: "eur", adaptive_pricing_enabled: false,
+      redirect_url: "https://example.test/billing", idempotency_key: "fixed-currency")
+    assert_equal "ch_fixed", result.id
     assert_requested request
   end
 
