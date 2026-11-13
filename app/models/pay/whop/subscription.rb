@@ -1,11 +1,12 @@
 module Pay
   module Whop
     class Subscription < Pay::Subscription
-      def self.sync(id, account_id: nil)
+      def self.sync(id, account_id: nil, customer: nil)
         object = Whop.api_attributes(Whop.api.memberships.retrieve(id: id, request_options: Whop.request_options))
         raise InvalidPayload, "Unexpected membership ID" unless object.fetch("id") == id
         Whop.verify_account!(object, expected: account_id)
-        customer = Customer.resolve!(object)
+        customer&.verify_resource!(object)
+        customer ||= Customer.resolve!(object)
         unless object["renewal_price"].present?
           Entitlement.sync_object(object, account_id: customer.account_id)
           return
@@ -54,6 +55,7 @@ module Pay
       def paused? = data.to_h["whop_billing_paused"] == true
 
       def active?
+        return on_trial? if status == "trialing"
         return super unless paused?
         %w[active trialing].include?(status) && current_period_end.present? && current_period_end.future? && (ends_at.nil? || ends_at.future?)
       end

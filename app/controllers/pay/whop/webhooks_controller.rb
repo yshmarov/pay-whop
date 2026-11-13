@@ -10,7 +10,7 @@ module Pay
         return head :ok unless Delivery::EVENTS.include?(event["type"])
         raise InvalidPayload, "Webhook ID mismatch" unless event.fetch("id") == request.headers["webhook-id"]
         object = event.fetch("data")
-        resource_id = event["type"].start_with?("refund.") ? object.fetch("payment_id") : object.fetch("id")
+        resource_id = event["type"].start_with?("refund.") ? refund_payment_id(object) : object.fetch("id")
         raise InvalidPayload, "Missing resource ID" if resource_id.blank?
         delivery = Delivery.create_or_find_by!(environment: Whop.environment, account_id: account, event_id: event.fetch("id")) do |record|
           record.event_type = event.fetch("type")
@@ -25,6 +25,16 @@ module Pay
         head :ok
       rescue ::StandardWebhooks::WebhookVerificationError, JSON::ParserError, KeyError, IdentityError, InvalidPayload
         head :bad_request
+      end
+
+      private
+
+      def refund_payment_id(object)
+        payment = object["payment"]
+        raise InvalidPayload, "Invalid refund payment" unless payment.nil? || payment.is_a?(Hash)
+        ids = [object["payment_id"], payment&.dig("id")].compact.uniq
+        raise InvalidPayload, "Missing or conflicting refund payment IDs" unless ids.one? && ids.first.is_a?(String) && ids.first.present?
+        ids.first
       end
     end
   end

@@ -103,4 +103,13 @@ class MarketplaceTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", transfer.status
     assert_equal 900, transfer.amount
   end
+  test "transfers preserve fractional major units in the request" do
+    merchant
+    api(:get, "accounts/biz_seller", {id: "biz_seller", parent_account: {id: "biz_test"}})
+    object = {id: "ctt_decimal", object: "transfer", origin: {id: "biz_test"}, destination: {id: "biz_seller"}, status: "succeeded", amount: money("9.43")}
+    request = api(:post, "transfers", object).with { |req| JSON.parse(req.body, decimal_class: BigDecimal)["amount"] == BigDecimal("9.43") }
+    api(:get, "transfers/ctt_decimal", object)
+    assert_equal 943, merchant.transfer(amount: 943, idempotency_key: "decimal-transfer").amount
+    assert_requested request
+  end
 end

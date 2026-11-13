@@ -1,12 +1,12 @@
 # Verification
 
-Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: [`0.1.0.alpha.4` on RubyGems](https://rubygems.org/gems/pay-whop/versions/0.1.0.alpha.4). The registry SHA-256 matches the built gem tested by the installation smoke check.
+Provider payment-flow verification: 7 November 2026. Expanded adapter, read-only sandbox operations and demo verification: 12 November 2026. Release: [`0.1.0.alpha.5` on RubyGems](https://rubygems.org/gems/pay-whop/versions/0.1.0.alpha.5). The registry SHA-256 matches the built gem tested by the installation smoke check.
 
 ## Versions and automated coverage
 
 Ruby 4.0.9, Rails 8.1.4.1, Pay 12.4.0, Whop Ruby SDK 2.7.0, and Whop API date `2026-10-28-1`. The demo runs PostgreSQL and GoodJob on Render Free / Neon Free. Unit and integration tests use SQLite and PostgreSQL, with WebMock at the SDK/HTTP boundary. No test credentials or captured customer payloads are committed.
 
-The local suite passes **100 tests / 369 assertions** and Standard Ruby linting. The local suite also passes with Pay 12.3.0; installation from the built gem into a fresh Rails application passes. GitHub Actions runs Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
+The local suite passes **109 tests / 423 assertions** and Standard Ruby linting. The local suite also passes with Pay 12.3.0; installation from the built gem into a fresh Rails application passes. GitHub Actions runs Ruby 3.3/3.4/4.0 × Pay 12.3.0/12.4.0 × SQLite/PostgreSQL; see [CI runs](https://github.com/yshmarov/pay-whop/actions/workflows/ci.yml).
 
 Coverage includes signed owner mapping, environment and seller isolation, conflicting identities, forged references, webhook authentication/replays/collisions, duplicate processing, pending-event recovery, enqueue refusal, stale snapshots, exact money conversion, full/partial refunds, asynchronous direct payments, saved methods, setup intents, invoice/dispute summaries, marketplace registration and transfers, terminal transfer-state protection, pause/access semantics, trial and past-due state mapping, and browser-session/CSRF/cross-customer boundaries. Expanded tests cover existing-payment retries without duplicate charges, renewal restrictions, normalized API errors including lazy pagination/timeouts, application callback failure recovery, payout ownership/pagination/reversals, merchant capabilities, decimal balances and linked-customer reconciliation.
 
@@ -55,6 +55,12 @@ The deployed webhook subscribes to all 30 adapter events, including payout chang
 8. Successful API responses may describe a pending operation. Neither a checkout return, an HTTP 200 nor a created transfer is treated as settlement.
 9. Immediate cancellation can leave `cancel_at_period_end: true` on the provider object. Terminal status and `canceled_at` take precedence so ended subscriptions cannot retain access or appear resumable.
 10. Refunds and transfers can fail due to available balance or account capabilities, even in the sandbox. The adapter does not bypass identity verification.
+
+## PaidCollabs integration verification (13 November 2026)
+
+Actual sandbox checks in a separate PaidCollabs application verified a signed hosted payment, duplicate webhook handling, full refund and the nested `payment.id` refund event. A real EUR 9.99 recurring membership started a 21-day trial with EUR 0 charged, then was canceled and verified ended. An actual PLN checkout configuration confirmed adaptive pricing disabled. These checks used an isolated database and existing sandbox credentials; no customer payloads or keys are packaged.
+
+This release adds opt-in shared buyers with signed per-organization ownership, verified customer-scoped membership returns, local trial expiry even when webhooks are delayed, and preservation of explicit adaptive-pricing settings omitted by SDK 2.7. Successful internal transfers and bank settlement remain unverified; Whop sandbox payouts are unavailable. PaidCollabs renewal/dunning lifecycle tests use HTTP fixtures rather than waiting for a complete provider billing cycle.
 
 ## Remaining limits
 
