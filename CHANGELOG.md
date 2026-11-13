@@ -1,11 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.0.alpha.5
 
 - Preserve explicit adaptive-pricing settings on inline checkouts instead of losing them in SDK serialization.
-
 - Expire trial access at its confirmed end even when the renewal webhook is delayed. Add customer-scoped membership reads/synchronization for verified free-trial returns, and reject another customer's signed resource before binding its member.
-
 - Allow hosts to opt into multiple Pay customers for one Whop member with `Pay::Whop.allow_shared_members = true`. Each payment or membership must carry a valid signed customer reference when the member is ambiguous; an already linked customer cannot change its member or seller.
 - Replace Pay's global processor/member uniqueness constraint with a non-Whop unique index and a Whop lookup index. Install the new migration before enabling shared buyers. Rolling it back requires first resolving duplicate Whop member mappings; it does not merge or delete records.
 - Reconcile signed refund webhooks containing either `payment_id` or nested `payment.id`, as observed in a genuine sandbox refund. Reject conflicting references and re-read the canonical payment before applying the refund.
